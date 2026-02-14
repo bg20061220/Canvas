@@ -9,9 +9,10 @@ A voice-first web app where users speak commands to design web components on a l
 ## Current Status
 
 **Phase 1: COMPLETE** — Foundation + voice pipeline + UI layout
-**Phase 2: NOT STARTED** — Agent + Socket.IO + voice-to-canvas loop
+**Phase 2: COMPLETE** — Agent + Socket.IO + voice-to-canvas loop
+**Phase 3: NOT STARTED** — Expand components + context intelligence
 
-The app runs (`npm run dev` → localhost:3000) and shows a split-panel layout. Voice input/output hooks exist but the AI agent is not wired yet. The chat sidebar shows a placeholder "Agent not connected" message.
+The app runs (`npm run dev` → localhost:3000) with a custom server (server.js) that wraps Next.js + Socket.IO. Voice/text input goes through Socket.IO to a Groq-powered AI agent, which calls tools to create/modify/delete components on the canvas. Agent narration appears in the chat sidebar and plays via TTS. Requires `GROQ_API_KEY` in `.env.local`.
 
 ## Tech Stack
 
@@ -37,7 +38,7 @@ Canvas/
 │   ├── page.js                # Main page. Split layout: canvas (left) + chat sidebar (right)
 │   │                          #   - Manages: status, messages[], voiceEnabled, textInput
 │   │                          #   - Uses: useVoiceInput, useVoiceOutput, useDesignStore
-│   │                          #   - TODO: Wire handleTranscript to Socket.IO → agent
+│   │                          #   - handleTranscript → sendInput via Socket.IO → agent
 │   ├── globals.css            # Tailwind import + custom animations (mic-pulse, fade-in-up, scrollbar)
 │   └── api/                   # (empty) Next.js API routes go here
 │
@@ -55,7 +56,9 @@ Canvas/
 │   │       └── MicButton.js        # Mic toggle button. States: idle (blue), listening (red+pulse)
 │   │
 │   ├── lib/
-│   │   ├── socket/                 # (empty) Socket.IO client setup goes here (Phase 2)
+│   │   ├── socket/
+│   │   │   └── useSocket.js        # useSocket({ onToolCall, onAgentResponse, onThinking, onError })
+│   │   │                           #   Returns: { isConnected, sendInput(text, state), sendInterrupt() }
 │   │   └── voice/
 │   │       ├── stt.js              # useVoiceInput() hook
 │   │       │                       #   - Tries: MediaRecorder → Smallest.AI /transcribe endpoint
@@ -82,10 +85,25 @@ Canvas/
 │                                   #   setTheme(theme)
 │                                   #   undo() / redo() / clearCanvas()
 │
-├── server/                         # (empty dirs) Backend code goes here in Phase 2
-│   ├── agent/                      # Mastra AI agent config
-│   ├── tools/                      # Agent tool definitions (create_component, modify, etc.)
-│   └── socket/                     # Socket.IO server setup
+├── server.js                       # Custom Node.js server: Next.js + Socket.IO on same port
+│
+├── server/
+│   ├── agent/
+│   │   └── designAgent.js          # runAgent(text, designState, sessionId) → { text, toolResults[] }
+│   │                               #   Uses: Mastra Agent class + Groq llama-3.3-70b-versatile
+│   │                               #   System prompt: UI design assistant with tool knowledge
+│   │                               #   Tracks conversation history per session (last 20 msgs)
+│   │                               #   Injects current design state as context
+│   ├── tools/
+│   │   └── designTools.js          # 6 Mastra createTool() tools with zod schemas:
+│   │                               #   create_component, create_form, create_section,
+│   │                               #   modify_component, delete_component, undo_action
+│   │                               #   Each returns { action, component/componentId/changes }
+│   └── socket/
+│       └── handler.js              # Socket.IO event handlers:
+│                                   #   user_input → runAgent → emit tool_call + agent_response
+│                                   #   interrupt → abort agent, clear processing flag
+│                                   #   clear_session → reset conversation history
 │
 ├── plan.md                         # Full hackathon build plan with phases & checklist
 ├── progress.md                     # Build progress log per phase
@@ -130,13 +148,14 @@ This is what goes in `designStore.components[]` and what the agent tools must pr
 5. **History = full state snapshots** — simple but works for hackathon, every action pushes to history[]
 6. **Agent doesn't touch DOM** — it produces component objects, Zustand stores them, React renders them
 
-## What Needs to Happen Next (Phase 2)
+## What Needs to Happen Next (Phase 3)
 
-1. **Mastra AI agent** in `server/agent/` — system prompt as UI design assistant, Groq provider
-2. **Agent tools** in `server/tools/` — `create_component`, `create_form`, `create_section`, `modify_component`, `delete_component`, `undo_action`
-3. **Socket.IO server** — attach to Next.js, handle `user_input` event → run agent → emit `tool_call` + `agent_response`
-4. **Socket.IO client** in `src/lib/socket/` — `useSocket` hook
-5. **Wire page.js** — `handleTranscript` sends text via socket instead of placeholder, received tool_calls update designStore, agent_response text goes to TTS
+1. **Card variants** — pricing card, feature card, profile/testimonial card, product card
+2. **Form components** — text, email, password, number inputs, textarea, select, checkboxes, radio, validation states
+3. **Navigation** — header/navbar improvements, footer with columns
+4. **Section/layout** — hero variants, features grid, CTA/banner, pricing section
+5. **Conversational context** — resolve "it"/"the button" references, track lastModified, multi-turn context
+6. **Update agent system prompt** — add all new component types and design principles
 
 ## Environment Variables Needed
 
@@ -145,12 +164,12 @@ GROQ_API_KEY=           # Get from console.groq.com
 SMALLEST_AI_API_KEY=    # Get from smallest.ai dashboard
 ```
 
-Both are empty in `.env.local` right now. Browser fallbacks work without them.
+GROQ_API_KEY is **required** for the agent to work. SMALLEST_AI_API_KEY is optional (browser fallbacks work without it).
 
 ## Commands
 
 ```bash
-npm run dev    # Start dev server (localhost:3000)
+npm run dev    # Start custom server with --watch (localhost:3000, Next.js + Socket.IO)
 npm run build  # Production build
-npm start      # Start production server
+npm start      # Start production server (node server.js)
 ```
