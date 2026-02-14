@@ -1,0 +1,36 @@
+{
+  "name": "canvas",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bg20061220/Canvas.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bg20061220/Canvas/issues"
+  },
+  "homepage": "https://github.com/bg20061220/Canvas#readme",
+  "dependencies": {
+    "@ai-sdk/groq": "^3.0.24",
+    "@mastra/core": "^1.4.0",
+    "@tailwindcss/postcss": "^4.1.18",
+    "next": "^16.1.6",
+    "postcss": "^8.5.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
+    "tailwindcss": "^4.1.18",
+    "uuid": "^13.0.0",
+    "zustand": "^5.0.11"
+  }
+}
