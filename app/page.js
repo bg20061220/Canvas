@@ -1,10 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import MicButton from "@/src/components/voice/MicButton";
 import CanvasRenderer from "@/src/components/canvas/CanvasRenderer";
-import { useVoiceInput } from "@/src/lib/voice/stt";
-import { useVoiceOutput } from "@/src/lib/voice/tts";
 import useDesignStore from "@/src/stores/designStore";
 import { useSocket } from "@/src/lib/socket/useSocket";
 
@@ -12,7 +9,6 @@ export default function Home() {
   const [textInput, setTextInput] = useState("");
   const [status, setStatus] = useState("idle");
   const [messages, setMessages] = useState([]);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const messagesEndRef = useRef(null);
 
   const addComponent = useDesignStore((s) => s.addComponent);
@@ -25,11 +21,6 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // TTS hook
-  const { speak, stop: stopSpeaking, isSpeaking } = useVoiceOutput({
-    enabled: voiceEnabled,
-  });
-
   // Add message to chat
   const addMessage = useCallback((role, text) => {
     setMessages((prev) => [...prev, { role, text, timestamp: Date.now() }]);
@@ -38,11 +29,19 @@ export default function Home() {
   // Handle tool calls from agent
   const handleToolCall = useCallback(
     (data) => {
+      console.log("🟣 [Frontend] Received tool_call from backend:", data);
+
       const { result } = data;
-      if (!result) return;
+      if (!result) {
+        console.log("❌ [Frontend] No result in tool_call data!");
+        return;
+      }
+
+      console.log("🟣 [Frontend] Processing action:", result.action);
 
       switch (result.action) {
         case "add_component":
+          console.log("🟣 [Frontend] Adding component to store:", result.component);
           addComponent(result.component);
           break;
         case "update_component":
@@ -54,6 +53,8 @@ export default function Home() {
         case "undo":
           undo();
           break;
+        default:
+          console.log("⚠️ [Frontend] Unknown action:", result.action);
       }
     },
     [addComponent, updateComponent, removeComponent, undo]
@@ -64,12 +65,8 @@ export default function Home() {
     (data) => {
       addMessage("agent", data.text);
       setStatus("idle");
-
-      if (data.speak && voiceEnabled) {
-        speak(data.text);
-      }
     },
-    [addMessage, speak, voiceEnabled]
+    [addMessage]
   );
 
   // Handle agent thinking
@@ -104,50 +101,21 @@ export default function Home() {
     };
   }, []);
 
-  // Handle completed transcription
-  const handleTranscript = useCallback(
-    (text) => {
-      if (!text.trim()) return;
-      setTextInput("");
-      addMessage("user", text);
-      setStatus("processing");
-
-      // Send to agent via Socket.IO
-      sendInput(text, getDesignState());
-    },
-    [addMessage, sendInput, getDesignState]
-  );
-
-  // STT hook
-  const {
-    isListening,
-    transcript,
-    error: sttError,
-    startListening,
-    stopListening,
-  } = useVoiceInput({ onTranscript: handleTranscript });
-
-  // Toggle mic
-  const handleMicClick = () => {
-    if (isListening) {
-      stopListening();
-      setStatus("processing");
-    } else {
-      // Interrupt agent if speaking
-      if (isSpeaking) {
-        stopSpeaking();
-        sendInterrupt();
-      }
-      startListening();
-      setStatus("listening");
-    }
-  };
-
   // Handle text submit
   const handleTextSubmit = (e) => {
     e.preventDefault();
     if (!textInput.trim()) return;
-    handleTranscript(textInput);
+
+    const designState = getDesignState();
+    console.log("🔵 [Frontend] Sending to backend:", {
+      text: textInput,
+      designState,
+    });
+
+    addMessage("user", textInput);
+    setStatus("processing");
+    sendInput(textInput, designState);
+    setTextInput("");
   };
 
   return (
@@ -174,39 +142,20 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => setVoiceEnabled(!voiceEnabled)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-              voiceEnabled
-                ? "border-blue-500/50 text-blue-400 bg-blue-500/10"
-                : "border-gray-700 text-gray-500"
-            }`}
-          >
-            {voiceEnabled ? "Voice On" : "Voice Off"}
-          </button>
-
           <div className="flex items-center gap-2 text-sm text-gray-400">
             <div
               className={`w-2 h-2 rounded-full ${
                 !isConnected
                   ? "bg-orange-500"
-                  : status === "listening"
-                  ? "bg-red-500 animate-pulse"
                   : status === "processing"
                   ? "bg-yellow-500 animate-pulse"
-                  : status === "speaking"
-                  ? "bg-blue-500 animate-pulse"
                   : "bg-green-500"
               }`}
             />
             {!isConnected
               ? "Connecting..."
-              : status === "listening"
-              ? "Listening..."
               : status === "processing"
               ? "Processing..."
-              : status === "speaking"
-              ? "Speaking..."
               : "Ready"}
           </div>
         </div>
@@ -236,7 +185,7 @@ export default function Home() {
                 d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z"
               />
             </svg>
-            <span className="text-sm font-medium text-gray-300">Voice Chat</span>
+            <span className="text-sm font-medium text-gray-300">Chat</span>
             {isConnected && (
               <span className="ml-auto text-xs text-green-500">Connected</span>
             )}
@@ -256,10 +205,10 @@ export default function Home() {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3z"
+                    d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"
                   />
                 </svg>
-                <p>Click the mic or type a message</p>
+                <p>Type a message to get started</p>
                 <p className="text-gray-700 mt-1">
                   Try: &quot;Create a hero section&quot;
                 </p>
@@ -311,31 +260,19 @@ export default function Home() {
 
           {/* Input area */}
           <div className="px-4 py-3 border-t border-gray-800">
-            {sttError && (
-              <p className="text-red-400 text-xs mb-2">Mic error: {sttError}</p>
-            )}
-
             <form onSubmit={handleTextSubmit} className="flex items-center gap-2">
-              <MicButton
-                isListening={isListening}
-                onClick={handleMicClick}
-                disabled={status === "processing"}
-              />
-
               <input
                 type="text"
-                value={isListening ? transcript || "Listening..." : textInput}
+                value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Ask me to create something..."
-                readOnly={isListening}
-                className={`flex-1 bg-[#12122a] border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-colors ${
-                  isListening ? "border-red-500/50 text-gray-300" : ""
-                }`}
+                placeholder="Type a command... (e.g., 'Create a hero section')"
+                disabled={status === "processing"}
+                className="flex-1 bg-[#12122a] border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-colors disabled:opacity-50"
               />
 
               <button
                 type="submit"
-                disabled={isListening || !textInput.trim()}
+                disabled={status === "processing" || !textInput.trim()}
                 className="p-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl transition-colors"
               >
                 <svg

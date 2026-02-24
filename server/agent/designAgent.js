@@ -1,78 +1,100 @@
-import { Agent } from "@mastra/core/agent";
 import { createGroq } from "@ai-sdk/groq";
+import { generateText } from "ai";
 import {
-  createComponentTool,
-  createFormTool,
-  createSectionTool,
-  modifyComponentTool,
-  deleteComponentTool,
-  undoActionTool,
+  createComponent,
+  createForm,
+  createSection,
+  modifyComponent,
+  deleteComponent,
+  undoAction,
 } from "../tools/designTools.js";
 
 const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-const SYSTEM_PROMPT = `You are a UI design assistant for a voice-controlled canvas app. Users speak commands to create and modify web components.
+const SYSTEM_PROMPT = `You are a UI design assistant. Users type commands to create and modify web components.
 
-YOUR JOB: Convert user requests into tool calls that create/modify components on a live canvas.
+YOUR JOB: Convert user requests into JSON tool calls.
+
+RESPONSE FORMAT - You must respond with JSON in this exact format:
+{
+  "tool": "tool_name",
+  "params": { /* tool parameters */ },
+  "message": "Short message to user"
+}
 
 AVAILABLE TOOLS:
-- create_component: Create buttons, text, headings, cards, inputs, containers, images, dividers, navbars
-- create_form: Create complete forms with fields and submit button
-- create_section: Create page sections (hero, features, pricing, cta, testimonials, footer)
-- modify_component: Change properties of an existing component
-- delete_component: Remove a component
-- undo_action: Undo the last change
 
-COMPONENT TYPES & PROPS:
-- button: { text, variant: "primary"|"secondary"|"outline"|"ghost", className }
-- text: { text, className }
-- heading: { text, variant: "h1"|"h2"|"h3", className }
-- card: { title, description, variant: "default"|"highlighted", className }
-- input: { label, placeholder, inputType: "text"|"email"|"password"|"number"|"textarea"|"select", className }
-- container: { className }
-- section: { title, subtitle, variant: "hero"|"features"|"pricing"|"cta", className }
-- image: { src, alt, width, height, className }
-- divider: { className }
-- navbar: { logo, links: string[], cta, className }
-- form: { title, className }
+1. create_component
+   Params: { type, props, children?, parentId? }
+   Types: "button" | "text" | "heading" | "card" | "input" | "container" | "section" | "image" | "divider" | "navbar"
+   Props examples:
+   - button: { text: "Click me", variant: "primary", className: "bg-blue-500 text-white px-4 py-2 rounded" }
+   - text: { text: "Some text", className: "text-gray-700" }
+   - heading: { text: "Title", variant: "h1", className: "text-4xl font-bold" }
+   - card: { title: "Card Title", description: "Description" }
+
+2. create_form
+   Params: { title?, fields: [{type, label, placeholder?, required?}], submitText? }
+   Field types: "text" | "email" | "password" | "number" | "textarea" | "select"
+
+3. create_section
+   Params: { sectionType: "hero" | "features" | "pricing" | "cta" | "footer", content?: {title?, subtitle?, ctaText?} }
+
+4. modify_component
+   Params: { componentId: "component_id", changes: { /* props to update */ } }
+
+5. delete_component
+   Params: { componentId: "component_id" }
+
+6. undo_action
+   Params: {}
 
 RULES:
-1. ALWAYS use tools. Never just describe what you would do—actually do it with tool calls.
-2. For ambiguous references ("it", "the button", "that"), use the lastModified component ID from the design state.
-3. When creating sections, use create_section for hero/features/pricing/cta.
-4. When user says "undo" or "go back", use undo_action.
-5. Use appropriate Tailwind classes in className for custom styling (e.g., "text-red-500", "bg-blue-600 text-white px-8 py-4 text-lg rounded-xl").
-6. For color changes, set the className prop with Tailwind color classes.
-7. For size changes (bigger/smaller), use Tailwind sizing classes in className.
-8. You can call multiple tools in one response for complex requests (e.g., "create a landing page" → hero + features + cta sections).
+1. ALWAYS respond with valid JSON
+2. Use Tailwind classes for styling in className
+3. Keep message short (1 sentence)
+4. For colors, use Tailwind classes like "bg-blue-500 text-white"
 
-RESPONSE STYLE:
-- Keep narration SHORT (1-2 sentences max). The user hears this via TTS.
-- Be conversational: "Done! Added a blue button." not "I have created a button component with primary variant."
-- If self-correcting: "Actually, let me adjust that..."
-- For multi-step: "Creating your landing page..." then the tools handle the rest.`;
+EXAMPLES:
 
-// Create the Mastra agent
-const designAgent = new Agent({
-  name: "design-agent",
-  instructions: SYSTEM_PROMPT,
-  model: groq("llama-3.3-70b-versatile"),
-  tools: {
-    create_component: createComponentTool,
-    create_form: createFormTool,
-    create_section: createSectionTool,
-    modify_component: modifyComponentTool,
-    delete_component: deleteComponentTool,
-    undo_action: undoActionTool,
-  },
-});
+User: "create a blue button"
+Response: {"tool":"create_component","params":{"type":"button","props":{"text":"Button","variant":"primary","className":"bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded"}},"message":"Added a blue button!"}
+
+User: "add a hero section"
+Response: {"tool":"create_section","params":{"sectionType":"hero","content":{"title":"Welcome","ctaText":"Get Started"}},"message":"Created hero section!"}
+
+User: "make a contact form"
+Response: {"tool":"create_form","params":{"title":"Contact Us","fields":[{"type":"text","label":"Name"},{"type":"email","label":"Email"},{"type":"textarea","label":"Message"}],"submitText":"Send"},"message":"Created contact form!"}`;
 
 // Conversation history per session
 const sessionHistory = new Map();
 
-export async function runAgent(userMessage, designState = {}, sessionId = "default") {
+// Tool executor
+async function executeTool(toolName, params) {
+  const tools = {
+    create_component: createComponent,
+    create_form: createForm,
+    create_section: createSection,
+    modify_component: modifyComponent,
+    delete_component: deleteComponent,
+    undo_action: undoAction,
+  };
+
+  const tool = tools[toolName];
+  if (!tool) {
+    throw new Error(`Unknown tool: ${toolName}`);
+  }
+
+  return await tool(params);
+}
+
+export async function runAgent(
+  userMessage,
+  designState = {},
+  sessionId = "default"
+) {
   // Get or create conversation history for this session
   if (!sessionHistory.has(sessionId)) {
     sessionHistory.set(sessionId, []);
@@ -92,54 +114,83 @@ CURRENT DESIGN STATE:
     null,
     2
   )}
-- Last modified: ${designState.context?.lastModified || "none"}
-- Theme: ${JSON.stringify(designState.theme || {})}`;
+- Last modified: ${designState.context?.lastModified || "none"}`;
 
-  // Add user message to history
-  history.push({ role: "user", content: userMessage });
+  // Prepare messages
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...history,
+    {
+      role: "user",
+      content: stateContext + "\n\nUser request: " + userMessage,
+    },
+  ];
 
-  // Keep history manageable (last 20 messages)
-  if (history.length > 20) {
-    history.splice(0, history.length - 20);
-  }
+  try {
+    // Use llama-3.3-70b-versatile without tools (text generation only)
+    const result = await generateText({
+      model: groq("llama-3.3-70b-versatile"),
+      messages,
+    });
 
-  // Prepend state context to the latest user message for the agent
-  const messagesWithContext = [...history];
-  messagesWithContext[messagesWithContext.length - 1] = {
-    role: "user",
-    content: stateContext + "\n\nUser request: " + userMessage,
-  };
+    console.log("🔍 [Backend] Raw LLM response:", result.text);
 
-  const result = await designAgent.generate(messagesWithContext, {
-    maxSteps: 5,
-  });
+    // Parse JSON from response
+    let toolCall;
+    try {
+      // Extract JSON from response (might have markdown code blocks)
+      let jsonText = result.text.trim();
 
-  // Collect all tool results from steps
-  const toolResults = [];
-  if (result.steps) {
-    for (const step of result.steps) {
-      if (step.toolCalls) {
-        for (const tc of step.toolCalls) {
-          toolResults.push({
-            tool: tc.toolName,
-            args: tc.args,
-            result: step.toolResults?.find((tr) => tr.toolCallId === tc.toolCallId)?.result,
-          });
-        }
+      // Remove markdown code blocks if present
+      if (jsonText.startsWith("```")) {
+        jsonText = jsonText.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
       }
+
+      toolCall = JSON.parse(jsonText);
+    } catch (parseError) {
+      console.error("❌ [Backend] Failed to parse JSON:", parseError);
+      return {
+        text: "Sorry, I had trouble understanding that. Can you try rephrasing?",
+        toolResults: [],
+      };
     }
+
+    console.log("🟢 [Backend] Parsed tool call:", {
+      tool: toolCall.tool,
+      params: toolCall.params,
+    });
+
+    // Execute the tool
+    const toolResult = await executeTool(toolCall.tool, toolCall.params);
+
+    console.log("🟡 [Backend] Tool returned:", toolResult);
+
+    // Add to history
+    history.push({ role: "user", content: userMessage });
+    history.push({ role: "assistant", content: result.text });
+
+    // Keep history manageable (last 20 messages)
+    if (history.length > 20) {
+      history.splice(0, history.length - 20);
+    }
+
+    return {
+      text: toolCall.message || "Done!",
+      toolResults: [
+        {
+          tool: toolCall.tool,
+          args: toolCall.params,
+          result: toolResult,
+        },
+      ],
+    };
+  } catch (error) {
+    console.error("❌ [Agent] Error:", error);
+    return {
+      text: "Sorry, something went wrong. Please try again.",
+      toolResults: [],
+    };
   }
-
-  // Get agent's text response
-  const agentText = result.text || "Done!";
-
-  // Add assistant response to history
-  history.push({ role: "assistant", content: agentText });
-
-  return {
-    text: agentText,
-    toolResults,
-  };
 }
 
 export function clearSession(sessionId = "default") {
