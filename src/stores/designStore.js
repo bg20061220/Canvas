@@ -1,6 +1,9 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-const useDesignStore = create((set, get) => ({
+const useDesignStore = create(
+  persist(
+    (set, get) => ({
   // Component tree on the canvas
   components: [],
 
@@ -98,6 +101,18 @@ const useDesignStore = create((set, get) => ({
       components,
     });
   },
-}));
+    }),
+    {
+      name: "voice-canvas-storage", // localStorage key
+      partialPersist: true, // Only persist what we specify
+      // Don't persist history/future (keeps localStorage small)
+      partialize: (state) => ({
+        components: state.components,
+        theme: state.theme,
+        context: state.context,
+      }),
+    }
+  )
+);
 
 export default useDesignStore;

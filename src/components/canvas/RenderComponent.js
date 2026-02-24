@@ -14,18 +14,33 @@ export default function RenderComponent({ component }) {
 
   switch (type) {
     case "button":
+      // Use inline styles for colors, Tailwind for layout
+      const buttonStyle = props.style || {};
+      const hasCustomClasses = props.className && props.className.trim().length > 0;
+      const defaultButtonClasses = "px-6 py-2.5 rounded-lg font-medium transition-colors";
+      const variantClasses =
+        props.variant === "outline"
+          ? "border-2 border-blue-500 text-blue-500 hover:bg-blue-500/10"
+          : props.variant === "ghost"
+          ? "text-blue-500 hover:bg-blue-500/10"
+          : props.variant === "secondary"
+          ? "bg-gray-600 hover:bg-gray-700 text-white"
+          : "bg-blue-600 hover:bg-blue-700 text-white";
+
       return (
         <button
-          className={`px-6 py-2.5 rounded-lg font-medium transition-colors ${
-            props.variant === "outline"
-              ? "border-2 border-blue-500 text-blue-500 hover:bg-blue-500/10"
-              : props.variant === "ghost"
-              ? "text-blue-500 hover:bg-blue-500/10"
-              : props.variant === "secondary"
-              ? "bg-gray-600 hover:bg-gray-700 text-white"
-              : "bg-blue-600 hover:bg-blue-700 text-white"
-          } ${props.className || ""}`}
-          style={props.style}
+          className={hasCustomClasses ? props.className : `${defaultButtonClasses} ${variantClasses}`}
+          style={buttonStyle}
+          onMouseEnter={(e) => {
+            if (buttonStyle['--hover-bg']) {
+              e.currentTarget.style.backgroundColor = buttonStyle['--hover-bg'];
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (buttonStyle.backgroundColor) {
+              e.currentTarget.style.backgroundColor = buttonStyle.backgroundColor;
+            }
+          }}
         >
           {props.text || props.content || "Button"}
         </button>

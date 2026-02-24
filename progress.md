@@ -37,7 +37,14 @@ Canvas/
 
 ---
 
-## Phase 2: Agent + Voice-to-Canvas Pipeline - COMPLETE
+## Phase 2: Agent + Text-to-Canvas Pipeline - COMPLETE ✅
+
+**Architecture Changes:**
+- ❌ **Removed Mastra framework** - too complex, using AI SDK directly
+- ❌ **Removed voice features** - focusing on text-only MVP for stability
+- ✅ **Manual JSON parsing** - LLM outputs JSON, we parse and execute tools manually
+- ✅ **Tailwind v3** - downgraded from v4 for stability (hover variants work)
+- ✅ **LocalStorage persistence** - designs survive page refresh
 
 **New Files:**
 ```
@@ -45,49 +52,58 @@ server.js                        - Custom Node.js server wrapping Next.js + Sock
 server/
   agent/
     designAgent.js               - AI agent using Vercel AI SDK + Groq (Llama 3.3 70B)
-                                   - System prompt as UI design assistant
+                                   - Manual JSON parsing (no structured tool calling)
+                                   - System prompt with Tailwind color palette
                                    - Conversation history per session (last 20 msgs)
-                                   - Sends current design state as context
-                                   - maxSteps: 5 for multi-tool calls
   tools/
-    designTools.js               - 6 tools with zod schemas:
-                                   - create_component (button, text, heading, card, input, container, etc.)
-                                   - create_form (fields + submit button)
-                                   - create_section (hero, features, pricing, cta, footer with defaults)
-                                   - modify_component (change props by componentId)
-                                   - delete_component (remove by componentId)
-                                   - undo_action (revert last change)
+    designTools.js               - 6 plain functions (no Mastra wrappers):
+                                   - createComponent, createForm, createSection
+                                   - modifyComponent, deleteComponent, undoAction
   socket/
-    handler.js                   - Socket.IO event handlers
-                                   - user_input → runAgent → emit tool_call + agent_response
-                                   - interrupt → abort current agent processing
-                                   - clear_session → reset conversation history
+    handler.js                   - Socket.IO event handlers with debug logging
 src/lib/socket/
   useSocket.js                   - Client hook: connect, sendInput, sendInterrupt
-                                   - Callbacks: onToolCall, onAgentResponse, onThinking, onError
+tailwind.config.js               - Tailwind v3 config with content paths
+postcss.config.mjs               - PostCSS with tailwindcss + autoprefixer
 ```
 
 **Modified Files:**
 ```
-app/page.js                      - Wired to Socket.IO: handleTranscript sends via socket,
-                                   tool_call events update designStore, agent_response → chat + TTS
-                                   - Added interrupt-on-mic (stops TTS + cancels agent)
-                                   - Connection status indicator (green dot when connected)
-package.json                     - Added "type": "module", ai, zod deps
-                                   - dev script: node --watch server.js
+app/page.js                      - Text-only input (voice removed)
+                                   - Socket.IO integration with debug logging
+                                   - Connection status indicator
+app/globals.css                  - Changed from @import to @tailwind directives (v3)
+src/stores/designStore.js        - Added Zustand persist middleware for localStorage
+src/components/canvas/RenderComponent.js - Fixed to respect custom className from agent
+package.json                     - Downgraded tailwindcss v4 → v3, added autoprefixer
 ```
 
-**What works now (run `npm run dev`):**
-- Custom server starts Next.js + Socket.IO on localhost:3000
-- Voice/text input → Socket.IO → Groq agent → tool calls → canvas updates
-- Agent responds with narration text → chat sidebar + TTS
-- Agent understands design context (current components, last modified, theme)
-- Multi-step commands (agent can call up to 5 tools per request)
+**What works now:**
+- Text input → Socket.IO → Groq agent → JSON parsing → tool execution → canvas updates
+- Agent responds with narration text → chat sidebar (no TTS)
+- Agent understands design context and Tailwind colors correctly
+- Hover effects work (bg-blue-500 hover:bg-amber-800)
+- LocalStorage persistence across page refreshes
 - Conversation history maintained per session
-- Interrupt handling: mic click stops TTS and cancels agent
-- Connection status shown in header + chat sidebar
+- Debug logging throughout the flow (🔵🟢🟡🟣📤)
 
-**Requires:** `GROQ_API_KEY` in `.env.local` for the agent to work.
+**Requires:**
+- `GROQ_API_KEY` in `.env.local`
+- Run with: `node server.js` (not npm run dev)
+
+**Key Fixes This Session:**
+1. Removed Mastra complexity → direct AI SDK usage
+2. Fixed Groq tool calling issues → manual JSON parsing
+3. Fixed Tailwind JIT dynamic class issue → switched to inline styles for colors
+4. Colors use inline styles (backgroundColor, color, --hover-bg CSS variable)
+5. Hover effects handled with onMouseEnter/onMouseLeave React events
+6. Tailwind only for static layout/spacing (px-4, py-2, rounded, etc.)
+7. Agent creates multiple items using children array + container
+8. Agent modifies existing components by reading design state context for componentId
+9. Added localStorage persistence → Zustand persist middleware
+
+**Why Inline Styles:**
+Tailwind JIT only generates CSS for classes found in source files at build time. Since the agent generates classes dynamically at runtime, Tailwind never sees them and doesn't generate CSS. Inline styles always work regardless of build-time scanning.
 
 ---
 

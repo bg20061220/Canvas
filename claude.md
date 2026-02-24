@@ -1,6 +1,9 @@
 Voice-Controlled Creative Canvas - Project Documentation
+
+**CURRENT STATUS:** Text-only MVP (voice features removed for simplicity). Working agent that creates/modifies components via text commands. LocalStorage persistence enabled.
+
 Project Overview
-A voice-first web application for designing web components, UI elements, and complete pages through natural conversation. Users speak commands to create, modify, and export designs in real-time. The agent understands design context, self-corrects mistakes, and provides streaming visual feedback.
+A ~~voice-first~~ **text-based** web application for designing web components, UI elements, and complete pages through natural conversation. Users type commands to create, modify, and export designs in real-time. The agent understands design context and provides streaming visual feedback.
 
 Core Value Proposition
 Problem: Traditional design tools require extensive GUI interaction - clicking through menus, dragging elements, adjusting properties. This is slow for rapid iteration and prototyping of web components.
@@ -235,8 +238,8 @@ Frontend
 
 Framework: Next.js (App Router) with React - JavaScript (not TypeScript)
 UI Rendering: React components for canvas
-Styling: Tailwind CSS (generated code also uses Tailwind)
-State Management: Zustand
+Styling: Tailwind CSS v3 (generated code also uses Tailwind) - v4 removed due to hover variant issues
+State Management: Zustand + persist middleware (localStorage for persistence across refreshes)
 Audio: Web Audio API for voice capture
 Voice Activity Detection: @ricky0123/vad-web (optional, fallback to manual push-to-talk)
 Communication: Socket.IO Client (socket.io-client)
@@ -245,19 +248,22 @@ Unique IDs: uuid
 
 Backend
 
-Agent Framework: Mastra AI (@mastra/core)
-
-Purpose: Agent orchestration, tool management, multi-step workflows
-Handles: Planning, reasoning, tool selection, memory management
-Provides: Pre-built agent patterns, tool registry, state persistence
-
-
-LLM Provider: Groq (@ai-sdk/groq)
+AI/LLM: Vercel AI SDK (@ai-sdk/groq) + Groq
 
 Model: Llama 3.3 70B (via Groq)
-Purpose: Natural language understanding, design reasoning, planning
-Capabilities: Intent understanding, design decisions, multi-step planning
-Why Groq: Extremely fast inference, ideal for real-time conversational UX
+Purpose: Natural language understanding, design reasoning
+Implementation: Manual JSON parsing (no structured tool calling)
+Process: LLM outputs JSON text → we parse → execute tool functions
+Why: Groq models have inconsistent structured tool calling support; manual parsing is more reliable
+Why Groq: Extremely fast inference, good for real-time UX
+
+
+Tool Execution: Plain JavaScript functions
+
+No framework wrapper (removed Mastra)
+6 functions: createComponent, createForm, createSection, modifyComponent, deleteComponent, undoAction
+Each returns standardized action objects
+Simpler, more transparent, easier to debug
 
 
 WebSocket Server: Socket.IO (socket.io)
@@ -270,19 +276,9 @@ Why Socket.IO: Auto-reconnect, fallback transport, room support, easy event hand
 
 Voice Services
 
-Speech-to-Text: Smallest.AI
+**REMOVED FOR MVP** - Focusing on text-only input for stability and simplicity.
 
-Purpose: Convert user voice to text
-Requirements: Low latency (<500ms), accurate transcription
-Integration: Frontend calls API, streams audio
-Fallback: Browser SpeechRecognition API (Web Speech API) if Smallest.AI is unavailable
-
-
-Text-to-Speech: Smallest.AI
-
-Purpose: Convert agent responses to voice
-Requirements: Natural voice, low latency (<300ms), interruptible
-Integration: Frontend receives text, streams to TTS, plays audio
+Voice features (STT/TTS, mic button) were stripped out to reduce complexity and dependencies. Can be added back later if needed. The core design-to-code functionality works perfectly with text commands.
 
 
 

@@ -8,11 +8,11 @@ A voice-first web app where users speak commands to design web components on a l
 
 ## Current Status
 
-**Phase 1: COMPLETE** — Foundation + voice pipeline + UI layout
-**Phase 2: COMPLETE** — Agent + Socket.IO + voice-to-canvas loop
+**Phase 1: COMPLETE** — Foundation + UI layout (voice removed)
+**Phase 2: COMPLETE** — Agent + Socket.IO + text-to-canvas loop
 **Phase 3: NOT STARTED** — Expand components + context intelligence
 
-The app runs (`npm run dev` → localhost:3000) with a custom server (server.js) that wraps Next.js + Socket.IO. Voice/text input goes through Socket.IO to a Groq-powered AI agent, which calls tools to create/modify/delete components on the canvas. Agent narration appears in the chat sidebar and plays via TTS. Requires `GROQ_API_KEY` in `.env.local`.
+The app runs (`node server.js` → localhost:3000) with a custom server that wraps Next.js + Socket.IO. **Text input only** (voice features removed for MVP). Uses Groq-powered AI agent with **manual JSON parsing** (no Mastra). Agent outputs JSON, we parse and execute tool functions. Components persist to localStorage. Requires `GROQ_API_KEY` in `.env.local`.
 
 ## Tech Stack
 
@@ -20,13 +20,13 @@ The app runs (`npm run dev` → localhost:3000) with a custom server (server.js)
 |-------|------|---------|
 | Framework | Next.js (App Router) | `next` (v16) |
 | Language | JavaScript (NOT TypeScript) | — |
-| Styling | Tailwind CSS v4 | `tailwindcss`, `@tailwindcss/postcss` |
-| State | Zustand | `zustand` |
+| Styling | Tailwind CSS v3 | `tailwindcss`, `autoprefixer` |
+| State | Zustand + persist | `zustand` |
 | WebSocket | Socket.IO | `socket.io`, `socket.io-client` |
-| Agent | Mastra AI | `@mastra/core` |
-| LLM | Groq (Llama 3.3 70B) | `@ai-sdk/groq` |
-| STT | Smallest.AI (fallback: browser SpeechRecognition) | REST API |
-| TTS | Smallest.AI (fallback: browser SpeechSynthesis) | REST API |
+| AI/LLM | Vercel AI SDK + Groq | `ai`, `@ai-sdk/groq` |
+| Model | Llama 3.3 70B | via Groq API |
+| Tool Calling | Manual JSON parsing | Custom implementation |
+| Persistence | localStorage | Browser API via Zustand persist |
 | IDs | uuid | `uuid` |
 
 ## File Map
@@ -141,12 +141,18 @@ This is what goes in `designStore.components[]` and what the agent tools must pr
 
 ## Key Architecture Decisions
 
-1. **Zustand over Context** — simpler API, no provider wrapping, works outside React
-2. **RenderComponent is recursive** — cards/forms/sections can have children[], each rendered by the same switch
-3. **STT/TTS have auto-fallback** — if Smallest.AI key missing or fails, uses free browser APIs
-4. **Split layout** — canvas left, chat right (like VS Code + Copilot)
-5. **History = full state snapshots** — simple but works for hackathon, every action pushes to history[]
-6. **Agent doesn't touch DOM** — it produces component objects, Zustand stores them, React renders them
+1. **No Mastra framework** — Removed for simplicity. Using AI SDK directly with manual JSON parsing.
+2. **Manual JSON parsing over structured tool calling** — LLM outputs JSON text, we parse manually. More reliable with Groq models.
+3. **Text-only input** — Voice features removed for MVP. Faster iteration, fewer dependencies, can add back later.
+4. **Inline styles for colors** — Agent outputs style object with backgroundColor, color, --hover-bg. Tailwind JIT can't handle dynamically generated classes, inline styles always work.
+5. **Hover via React events** — onMouseEnter/onMouseLeave handle hover colors using --hover-bg CSS variable. No CSS pseudo-classes needed.
+6. **Tailwind for static layout only** — px-4, py-2, rounded, grid, etc. Never for colors (they're dynamic).
+7. **Multiple items via children array** — Agent creates container with children for "3 cards" requests.
+8. **Modify uses design state context** — Agent reads component IDs from design state to modify existing components.
+9. **Zustand + persist middleware** — Designs save to localStorage automatically. Survives page refresh.
+10. **RenderComponent is recursive** — cards/forms/sections can have children[], each rendered by the same switch
+11. **Split layout** — canvas left, chat right (like VS Code + Copilot)
+12. **History = full state snapshots** — simple but works for MVP, every action pushes to history[]
 
 ## What Needs to Happen Next (Phase 3)
 

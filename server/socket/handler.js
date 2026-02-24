@@ -41,6 +41,10 @@ export function setupSocketHandlers(io) {
           if (abortController.signal.aborted) break;
 
           if (toolResult.result) {
+            console.log("📤 [Socket] Emitting tool_call to frontend:", {
+              tool: toolResult.tool,
+              result: toolResult.result,
+            });
             socket.emit("tool_call", {
               tool: toolResult.tool,
               result: toolResult.result,

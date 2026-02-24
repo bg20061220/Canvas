@@ -1,8 +1,14 @@
 # Voice-Controlled Creative Canvas - Hackathon Build Plan
 
-> **Duration:** 24-48 hours | **Voice Hackathon** - voice is the #1 priority
-> **Stack:** Next.js + JavaScript + Tailwind + Mastra AI + Groq + Smallest.AI + Socket.IO
+> **Duration:** 24-48 hours | ~~Voice Hackathon~~ **TEXT-ONLY MVP** (voice removed for stability)
+> **Stack:** Next.js + JavaScript + Tailwind v3 + ~~Mastra AI~~ AI SDK Direct + Groq + ~~Smallest.AI~~ + Socket.IO
 > Use this as a checklist. Work top-to-bottom. Each phase builds on the previous one.
+
+**DEVIATIONS FROM ORIGINAL PLAN:**
+- ❌ Removed all voice features (STT/TTS, mic button) for MVP simplicity
+- ❌ Removed Mastra framework - using AI SDK directly with manual JSON parsing
+- ✅ Downgraded Tailwind v4 → v3 for stability (hover variants work)
+- ✅ Added localStorage persistence (moved from Phase 6 to Phase 2)
 
 ---
 
@@ -325,11 +331,52 @@
 
 ---
 
-## Key Dependencies to Install
+## Lessons Learned / Key Fixes
+
+### 1. Mastra Framework Was Overkill
+**Problem:** Mastra added unnecessary complexity and abstraction layers.
+**Solution:** Removed Mastra. Use AI SDK directly with manual JSON parsing.
+**Lesson:** For MVPs, simpler is better. Don't add frameworks unless absolutely necessary.
+
+### 2. Structured Tool Calling Was Unreliable
+**Problem:** Groq models had inconsistent support for structured tool calling. Generated malformed tool calls.
+**Solution:** Manual JSON parsing. LLM outputs JSON text, we parse and execute manually.
+**Lesson:** When LLM features are unreliable, fall back to text parsing. It's more transparent anyway.
+
+### 3. Tailwind v4 Is Not Production Ready
+**Problem:** Tailwind v4 didn't generate hover pseudo-class variants properly with Next.js.
+**Solution:** Downgraded to Tailwind v3. All variants work correctly now.
+**Lesson:** Don't use beta/experimental versions for time-sensitive projects.
+
+### 4. LLMs Don't Know Tailwind Colors
+**Problem:** LLM generated invalid colors like "brown-500" (doesn't exist in Tailwind).
+**Solution:** Added complete Tailwind color palette to system prompt with examples.
+**Lesson:** Be explicit about constraints. LLMs will make up values if not told what's valid.
+
+### 5. CSS Specificity Issues
+**Problem:** RenderComponent's default variant styles overrode agent's custom className.
+**Solution:** Only apply variant defaults when NO custom className provided.
+**Lesson:** When mixing default and custom styles, make one take precedence clearly.
+
+### 6. Voice Adds Complexity
+**Problem:** Voice features (STT/TTS/VAD) added many dependencies and potential failure points.
+**Solution:** Removed all voice features. Text-only MVP works perfectly.
+**Lesson:** For hackathons/MVPs, cut features aggressively. Voice can be added later.
+
+### 7. LocalStorage Is Free Persistence
+**Problem:** Users lost work on page refresh.
+**Solution:** Zustand persist middleware → automatic localStorage sync.
+**Lesson:** Add persistence early. It's trivial with modern tools and provides huge UX value.
+
+---
+
+## Key Dependencies to Install (Actual)
 ```
 # Core
 next react react-dom
-tailwindcss @tailwindcss/postcss postcss
+
+# Styling
+tailwindcss@3 autoprefixer postcss
 
 # State
 zustand
@@ -337,21 +384,21 @@ zustand
 # WebSocket
 socket.io socket.io-client
 
-# AI/Agent
-@mastra/core @ai-sdk/groq
-
-# Voice
-smallest-ai (or direct REST API calls)
+# AI/LLM
+ai @ai-sdk/groq zod
 
 # Utilities
 uuid
 
-# Export/Code Display (Phase 5)
-prism-react-renderer
-
-# Optional: Voice Activity Detection
-@ricky0123/vad-web
+# Export/Code Display (Phase 5 - not yet installed)
+# prism-react-renderer
 ```
+
+**Removed:**
+- ❌ @mastra/core (too complex)
+- ❌ @tailwindcss/postcss (v4 plugin, using v3 now)
+- ❌ smallest-ai (voice removed)
+- ❌ @ricky0123/vad-web (voice removed)
 
 ---
 
