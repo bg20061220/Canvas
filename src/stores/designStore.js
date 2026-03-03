@@ -28,43 +28,108 @@ const useDesignStore = create(
 
   // ---- Actions ----
 
-  addComponent: (component) => {
+  addComponent: (component, insertBefore = null) => {
     const state = get();
+    let newComponents;
+    if (insertBefore) {
+      const idx = state.components.findIndex((c) => c.id === insertBefore);
+      if (idx !== -1) {
+        newComponents = [...state.components.slice(0, idx), component, ...state.components.slice(idx)];
+      } else {
+        newComponents = [...state.components, component];
+      }
+    } else {
+      newComponents = [...state.components, component];
+    }
     set({
       history: [...state.history, { components: [...state.components] }],
       future: [],
-      components: [...state.components, component],
+      components: newComponents,
       context: { ...state.context, lastModified: component.id },
     });
   },
 
   updateComponent: (id, changes) => {
     const state = get();
+
+    // Normalize: agent sometimes wraps changes in a redundant "props" key
+    const normalized = changes.props && typeof changes.props === "object" ? changes.props : changes;
+
+    function applyUpdate(components) {
+      return components.map((c) => {
+        if (c.id === id) {
+          return {
+            ...c,
+            props: {
+              ...c.props,
+              ...normalized,
+              ...(normalized.style ? { style: { ...c.props?.style, ...normalized.style } } : {}),
+            },
+          };
+        }
+        if (c.children?.length > 0) {
+          return { ...c, children: applyUpdate(c.children) };
+        }
+        return c;
+      });
+    }
+
     set({
       history: [...state.history, { components: [...state.components] }],
       future: [],
-      components: state.components.map((c) => {
-        if (c.id !== id) return c;
-        return {
-          ...c,
-          props: {
-            ...c.props,
-            ...changes,
-            // Deep-merge style so existing style props aren't wiped
-            ...(changes.style ? { style: { ...c.props?.style, ...changes.style } } : {}),
-          },
-        };
-      }),
+      components: applyUpdate(state.components),
       context: { ...state.context, lastModified: id },
     });
   },
 
   removeComponent: (id) => {
     const state = get();
+
+    function applyRemove(components) {
+      return components
+        .filter((c) => c.id !== id)
+        .map((c) => c.children?.length > 0 ? { ...c, children: applyRemove(c.children) } : c);
+    }
+
     set({
       history: [...state.history, { components: [...state.components] }],
       future: [],
-      components: state.components.filter((c) => c.id !== id),
+      components: applyRemove(state.components),
+    });
+  },
+
+  addChildComponent: (parentId, child, insertBefore = null) => {
+    const state = get();
+
+    function applyAdd(components) {
+      return components.map((c) => {
+        if (c.id === parentId) {
+          const siblings = c.children || [];
+          let newChildren;
+          if (insertBefore) {
+            const idx = siblings.findIndex((s) => s.id === insertBefore);
+            if (idx !== -1) {
+              newChildren = [...siblings.slice(0, idx), child, ...siblings.slice(idx)];
+            } else {
+              newChildren = [...siblings, child];
+            }
+          } else {
+            newChildren = [...siblings, child];
+          }
+          return { ...c, children: newChildren };
+        }
+        if (c.children?.length > 0) {
+          return { ...c, children: applyAdd(c.children) };
+        }
+        return c;
+      });
+    }
+
+    set({
+      history: [...state.history, { components: [...state.components] }],
+      future: [],
+      components: applyAdd(state.components),
+      context: { ...state.context, lastModified: parentId },
     });
   },
 

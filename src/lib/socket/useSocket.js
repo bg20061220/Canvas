@@ -7,6 +7,17 @@ export function useSocket({ onToolCall, onAgentResponse, onThinking, onError }) 
   const socketRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
 
+  // Keep callback refs up to date so socket listeners always call the latest version
+  const onToolCallRef = useRef(onToolCall);
+  const onAgentResponseRef = useRef(onAgentResponse);
+  const onThinkingRef = useRef(onThinking);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => { onToolCallRef.current = onToolCall; }, [onToolCall]);
+  useEffect(() => { onAgentResponseRef.current = onAgentResponse; }, [onAgentResponse]);
+  useEffect(() => { onThinkingRef.current = onThinking; }, [onThinking]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
+
   useEffect(() => {
     const socket = io({
       reconnection: true,
@@ -28,27 +39,26 @@ export function useSocket({ onToolCall, onAgentResponse, onThinking, onError }) 
 
     socket.on("tool_call", (data) => {
       console.log("[Socket] Tool call:", data);
-      onToolCall?.(data);
+      onToolCallRef.current?.(data);
     });
 
     socket.on("agent_response", (data) => {
       console.log("[Socket] Agent response:", data);
-      onAgentResponse?.(data);
+      onAgentResponseRef.current?.(data);
     });
 
     socket.on("agent_thinking", (data) => {
-      onThinking?.(data);
+      onThinkingRef.current?.(data);
     });
 
     socket.on("error", (data) => {
       console.error("[Socket] Error:", data);
-      onError?.(data);
+      onErrorRef.current?.(data);
     });
 
     return () => {
       socket.disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const sendInput = useCallback((text, designState) => {

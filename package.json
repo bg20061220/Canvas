@@ -21,8 +21,10 @@
   },
   "homepage": "https://github.com/bg20061220/Canvas#readme",
   "dependencies": {
+    "@ai-sdk/google": "^3.0.37",
     "@ai-sdk/groq": "^3.0.24",
     "@mastra/core": "^1.4.0",
+    "@openrouter/ai-sdk-provider": "^2.2.3",
     "ai": "^6.0.86",
     "next": "^16.1.6",
     "postcss": "^8.5.6",

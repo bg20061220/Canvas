@@ -71,7 +71,23 @@ export default function RenderComponent({ component }) {
           style={props.style}
         >
           {props.title && <h3 className="text-xl font-semibold mb-2">{props.title}</h3>}
+          {props.subtitle && <p className="text-gray-400 text-sm mb-1">{props.subtitle}</p>}
+          {props.price && (
+            <div className="my-3">
+              <span className="text-3xl font-bold">{props.price}</span>
+              {props.period && <span className="text-gray-400 text-sm ml-1">{props.period}</span>}
+            </div>
+          )}
           {props.description && <p className="text-gray-400">{props.description}</p>}
+          {props.features && Array.isArray(props.features) && (
+            <ul className="mt-3 space-y-1">
+              {props.features.map((f, i) => (
+                <li key={i} className="text-gray-300 text-sm flex items-center gap-2">
+                  <span className="text-green-400">✓</span>{f}
+                </li>
+              ))}
+            </ul>
+          )}
           {children.length > 0 && <div className="mt-4 space-y-3">{renderChildren()}</div>}
         </div>
       );
@@ -143,6 +159,7 @@ export default function RenderComponent({ component }) {
       );
 
     case "navbar":
+      const ctaChild = children.find((c) => c.type === "button");
       return (
         <nav
           className={`flex items-center justify-between px-6 py-4 bg-[#111128] border border-gray-800 rounded-xl ${props.className || ""}`}
@@ -156,11 +173,7 @@ export default function RenderComponent({ component }) {
               </span>
             ))}
           </div>
-          {props.cta && (
-            <button className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium">
-              {props.cta}
-            </button>
-          )}
+          {ctaChild && <RenderComponent component={ctaChild} />}
         </nav>
       );
 

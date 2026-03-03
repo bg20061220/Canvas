@@ -14,6 +14,7 @@ export default function Home() {
   const addComponent = useDesignStore((s) => s.addComponent);
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const removeComponent = useDesignStore((s) => s.removeComponent);
+  const addChildComponent = useDesignStore((s) => s.addChildComponent);
   const undo = useDesignStore((s) => s.undo);
   const clearCanvas = useDesignStore((s) => s.clearCanvas);
 
@@ -43,7 +44,7 @@ export default function Home() {
       switch (result.action) {
         case "add_component":
           console.log("🟣 [Frontend] Adding component to store:", result.component);
-          addComponent(result.component);
+          addComponent(result.component, result.insertBefore || null);
           break;
         case "update_component":
           updateComponent(result.componentId, result.changes);
@@ -54,6 +55,9 @@ export default function Home() {
         case "undo":
           undo();
           break;
+        case "add_child":
+          addChildComponent(result.parentId, result.child, result.insertBefore || null);
+          break;
         case "clear_canvas":
           clearCanvas();
           break;
@@ -61,7 +65,7 @@ export default function Home() {
           console.log("⚠️ [Frontend] Unknown action:", result.action);
       }
     },
-    [addComponent, updateComponent, removeComponent, undo, clearCanvas]
+    [addComponent, updateComponent, removeComponent, addChildComponent, undo, clearCanvas]
   );
 
   // Handle agent text response

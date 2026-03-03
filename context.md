@@ -4,29 +4,29 @@
 
 ## What This App Is
 
-A voice-first web app where users speak commands to design web components on a live canvas. Say "create a pricing card" and it appears. Say "make the button blue" and it updates. The agent understands context, maintains design state, and responds via voice.
+A text-based web app where users type commands to design web components on a live canvas. Type "create a pricing card" and it appears. Type "make the button blue" and it updates instantly. The agent understands context, maintains design state, and supports nested components. Voice features planned for later.
 
 ## Current Status
 
-**Phase 1: COMPLETE** — Foundation + UI layout (voice removed)
-**Phase 2: COMPLETE** — Agent + Socket.IO + text-to-canvas loop (+ bug fixes)
-**Phase 3: NOT STARTED** — Expand components + context intelligence
+**Phase 1: COMPLETE** — Foundation + UI layout
+**Phase 2: COMPLETE** — Agent + Socket.IO + text-to-canvas loop (+ all bug fixes)
+**Phase 3: PARTIALLY COMPLETE** — Child targeting ✅, add_child ✅, card variants ✅, ordering ✅ | voice context pending
+**Phase 5: IN PROGRESS** — Export feature next
 
-The app runs (`node server.js` → localhost:3000) with a custom server that wraps Next.js + Socket.IO. **Text input only** (voice features removed for MVP). Uses Groq-powered AI agent with **manual JSON parsing** (no Mastra). Agent outputs JSON, we parse and execute tool functions. Components persist to localStorage. Requires `GROQ_API_KEY` in `.env.local`.
-
-**Create and modify both work correctly.** The `updateComponent` store bug (changes merging at component root instead of into `props`) has been fixed.
+The app runs (`node server.js` → localhost:3000). **Text input only** (voice removed for MVP). Uses Groq-powered AI agent with **manual JSON parsing**. All 15 core interactions work end-to-end including nested child targeting, component ordering, and API fallback chains.
 
 ## Tech Stack
 
 | Layer | Tool | Package |
 |-------|------|---------|
-| Framework | Next.js (App Router) | `next` (v16) |
+| Framework | Next.js (App Router) | `next` |
 | Language | JavaScript (NOT TypeScript) | — |
 | Styling | Tailwind CSS v3 | `tailwindcss`, `autoprefixer` |
 | State | Zustand + persist | `zustand` |
 | WebSocket | Socket.IO | `socket.io`, `socket.io-client` |
 | AI/LLM | Vercel AI SDK + Groq | `ai`, `@ai-sdk/groq` |
 | Model | **Llama 3.3 70B Versatile** (sole model) | via Groq API |
+| Fallback | OpenRouter free models | `@openrouter/ai-sdk-provider` |
 | Tool Calling | Manual JSON parsing | Custom implementation |
 | Persistence | localStorage | Browser API via Zustand persist |
 | IDs | uuid | `uuid` |
@@ -36,154 +36,149 @@ The app runs (`node server.js` → localhost:3000) with a custom server that wra
 ```
 Canvas/
 ├── app/
-│   ├── layout.js              # Root layout. Dark theme, Inter font, html class="dark"
-│   ├── page.js                # Main page. Split layout: canvas (left) + chat sidebar (right)
-│   │                          #   - Manages: status, messages[], voiceEnabled, textInput
-│   │                          #   - Uses: useVoiceInput, useVoiceOutput, useDesignStore
-│   │                          #   - handleTranscript → sendInput via Socket.IO → agent
-│   ├── globals.css            # Tailwind import + custom animations (mic-pulse, fade-in-up, scrollbar)
-│   └── api/                   # (empty) Next.js API routes go here
+│   ├── layout.js              # Root layout. Dark theme, Inter font
+│   ├── page.js                # Main page. Canvas (left) + chat sidebar (right)
+│   │                          #   Handles all tool actions: add_component, update_component,
+│   │                          #   delete_component, undo, add_child, clear_canvas
+│   │                          #   Pulls addChildComponent + clearCanvas from store
+│   ├── globals.css            # Tailwind import + custom animations
+│   └── api/                   # (empty)
 │
 ├── src/
 │   ├── components/
 │   │   ├── canvas/
 │   │   │   ├── CanvasRenderer.js   # Reads designStore.components[], maps each to RenderComponent
-│   │   │   │                       # Shows empty state placeholder when no components
 │   │   │   └── RenderComponent.js  # Switch on component.type → renders React element
 │   │   │                           # Types: button, text/heading, card, input, container/section,
 │   │   │                           #        image, divider, form, navbar
-│   │   │                           # Supports recursive children for nested components
-│   │   ├── ui/                     # (empty) Shared UI components go here
+│   │   │                           # Card renders: title, subtitle, price, period, description, features[]
+│   │   │                           # Navbar: CTA rendered from children.find(c => c.type === "button")
+│   │   │                           # All support recursive children
 │   │   └── voice/
-│   │       └── MicButton.js        # Mic toggle button. States: idle (blue), listening (red+pulse)
+│   │       └── MicButton.js        # (unused in MVP)
 │   │
 │   ├── lib/
-│   │   ├── socket/
-│   │   │   └── useSocket.js        # useSocket({ onToolCall, onAgentResponse, onThinking, onError })
-│   │   │                           #   Returns: { isConnected, sendInput(text, state), sendInterrupt() }
-│   │   └── voice/
-│   │       ├── stt.js              # useVoiceInput() hook
-│   │       │                       #   - Tries: MediaRecorder → Smallest.AI /transcribe endpoint
-│   │       │                       #   - Fallback: browser SpeechRecognition API
-│   │       │                       #   - Returns: { isListening, transcript, error, startListening, stopListening }
-│   │       │                       #   - Calls onTranscript(text) when final result ready
-│   │       └── tts.js              # useVoiceOutput() hook
-│   │                               #   - Tries: Smallest.AI /synthesize endpoint
-│   │                               #   - Fallback: browser SpeechSynthesis API
-│   │                               #   - Returns: { speak(text), stop(), isSpeaking }
+│   │   └── socket/
+│   │       └── useSocket.js        # useSocket({ onToolCall, onAgentResponse, onThinking, onError })
+│   │                               # Stale closure fix: all callbacks stored in refs, updated each render
+│   │                               # Returns: { isConnected, sendInput(text, state), sendInterrupt() }
 │   │
 │   └── stores/
-│       └── designStore.js          # Zustand store — the single source of truth
-│                                   # State:
-│                                   #   components[] — array of { id, type, props, children }
-│                                   #   theme — { primaryColor, secondaryColor, fontFamily, style }
-│                                   #   context — { lastModified, currentSection, designIntent }
-│                                   #   history[] / future[] — for undo/redo
+│       └── designStore.js          # Zustand store — single source of truth
+│                                   # State: components[], theme, context, history[], future[]
 │                                   # Actions:
-│                                   #   addComponent(component)
-│                                   #   updateComponent(id, changes)
-│                                   #   removeComponent(id)
-│                                   #   setComponents(components) — bulk replace (for agent)
-│                                   #   setTheme(theme)
-│                                   #   undo() / redo() / clearCanvas()
+│                                   #   addComponent(component, insertBefore?)
+│                                   #   updateComponent(id, changes) — recursive applyUpdate()
+│                                   #   removeComponent(id) — recursive applyRemove()
+│                                   #   addChildComponent(parentId, child, insertBefore?)
+│                                   #   setComponents, setTheme, undo, redo, clearCanvas
 │
 ├── server.js                       # Custom Node.js server: Next.js + Socket.IO on same port
 │
 ├── server/
 │   ├── agent/
 │   │   └── designAgent.js          # runAgent(text, designState, sessionId) → { text, toolResults[] }
-│   │                               #   Uses: Mastra Agent class + Groq llama-3.3-70b-versatile
-│   │                               #   System prompt: UI design assistant with tool knowledge
-│   │                               #   Tracks conversation history per session (last 20 msgs)
-│   │                               #   Injects current design state as context
+│   │                               #   Primary: Groq llama-3.3-70b-versatile, maxTokens: 500
+│   │                               #   Fallback on 429: OpenRouter free models (stepfun → arcee → nvidia)
+│   │                               #   flattenComponents() → agent sees ALL IDs including children
+│   │                               #   Compact history: { tool, message } only, max 10 messages
+│   │                               #   params guard in executeTool (throws if params undefined)
 │   ├── tools/
-│   │   └── designTools.js          # 6 Mastra createTool() tools with zod schemas:
-│   │                               #   create_component, create_form, create_section,
-│   │                               #   modify_component, delete_component, undo_action
-│   │                               #   Each returns { action, component/componentId/changes }
+│   │   └── designTools.js          # 8 tool functions:
+│   │                               #   create_component — auto-generates button child for navbar cta
+│   │                               #   create_form — fields[] + submit button
+│   │                               #   create_section — hero/features/pricing/cta/footer with insertBefore
+│   │                               #   modify_component — pass-through
+│   │                               #   delete_component — pass-through
+│   │                               #   undo_action — pass-through
+│   │                               #   clear_canvas — returns { action: "clear_canvas" }
+│   │                               #   add_child — generates UUID for child, returns add_child action
 │   └── socket/
-│       └── handler.js              # Socket.IO event handlers:
-│                                   #   user_input → runAgent → emit tool_call + agent_response
-│                                   #   interrupt → abort agent, clear processing flag
-│                                   #   clear_session → reset conversation history
+│       └── handler.js              # user_input → runAgent → emit tool_call + agent_response
 │
-├── plan.md                         # Full hackathon build plan with phases & checklist
-├── progress.md                     # Build progress log per phase
-├── context.md                      # THIS FILE — session context for Claude
-├── claude.md                       # Project docs, spec, architecture diagrams
-├── .env.local                      # GROQ_API_KEY=, SMALLEST_AI_API_KEY= (empty, needs keys)
-├── next.config.mjs                 # Basic Next.js config
-├── postcss.config.mjs              # Tailwind v4 PostCSS plugin
-├── jsconfig.json                   # Path alias: @/* → ./*
-└── package.json                    # All deps installed, scripts: dev/build/start
+├── plan.md / progress.md / context.md
+├── .env.local                      # GROQ_API_KEY, OPENROUTER_API_KEY
+└── package.json
 ```
 
 ## Component Data Shape
 
-This is what goes in `designStore.components[]` and what the agent tools must produce:
-
 ```js
 {
-  id: "btn_1",           // unique, generated via uuid
-  type: "button",        // one of: button, text, heading, card, input, container, section, image, divider, form, navbar
-  props: {               // type-specific properties
-    text: "Sign Up",     // display text (button, text, heading)
-    variant: "primary",  // visual variant (button: primary/secondary/outline/ghost)
-    className: "",       // extra Tailwind classes
-    style: {},           // inline styles (rarely used)
-    // card: title, description
+  id: "btn_1abc2def",     // uuid-generated: type_uuid8chars
+  type: "button",         // button | text | heading | card | input | container | section | image | divider | form | navbar
+  props: {
+    text: "Sign Up",      // display text (button, text, heading)
+    variant: "primary",   // button variants: primary/secondary/outline/ghost
+    className: "",        // Tailwind layout classes (spacing, grid, rounded — NOT colors)
+    style: {              // inline styles for colors (Tailwind JIT can't handle runtime classes)
+      backgroundColor: "#3b82f6",
+      color: "#ffffff",
+      "--hover-bg": "#2563eb",   // handled via onMouseEnter/Leave in RenderComponent
+    },
+    // card: title, subtitle, price, period, description, features[]
     // input: label, placeholder, inputType
-    // section: title, subtitle, variant ("hero")
-    // navbar: logo, links[], cta
+    // section/container: title, subtitle, variant ("hero")
+    // navbar: logo, links[], cta (string — auto-generates button child)
     // image: width, height
   },
-  children: [],          // nested components (for card, form, section, container, navbar)
+  children: [],           // nested component objects (same shape, recursive)
 }
 ```
 
 ## Key Architecture Decisions
 
-1. **No Mastra framework** — Removed for simplicity. Using AI SDK directly with manual JSON parsing.
-2. **Manual JSON parsing over structured tool calling** — LLM outputs JSON text, we parse manually. More reliable with Groq models.
-3. **Text-only input** — Voice features removed for MVP. Faster iteration, fewer dependencies, can add back later.
-4. **Inline styles for colors** — Agent outputs style object with backgroundColor, color, --hover-bg. Tailwind JIT can't handle dynamically generated classes, inline styles always work.
-5. **Hover via React events** — onMouseEnter/onMouseLeave handle hover colors using --hover-bg CSS variable. No CSS pseudo-classes needed.
-6. **Tailwind for static layout only** — px-4, py-2, rounded, grid, etc. Never for colors (they're dynamic).
-7. **Multiple items via children array** — Agent creates container with children for "3 cards" requests.
-8. **Modify uses design state context** — Agent reads component IDs from design state to modify existing components.
-9. **Zustand + persist middleware** — Designs save to localStorage automatically. Survives page refresh.
-10. **RenderComponent is recursive** — cards/forms/sections can have children[], each rendered by the same switch
-11. **Split layout** — canvas left, chat right (like VS Code + Copilot)
-12. **History = full state snapshots** — simple but works for MVP, every action pushes to history[]
-13. **`updateComponent` merges changes into `props`** — `changes` from the agent are props-level (`{ style, className, text, ... }`). Must be spread into `c.props`, not `c` root. `style` is deep-merged to preserve existing style keys.
-14. **70B as sole model** — `llama-3.3-70b-versatile`, `maxTokens: 500`. 8B was dropped — it failed on complex components and triggered 70B retries anyway, costing more than just using 70B directly.
-15. **Compact history** — Only `{ tool, message }` stored per assistant turn (not full JSON blob). Max 10 messages (5 turns).
-16. **`extractJSON` is string-aware** — Brace-depth parser tracks `inString`/`escape` state to skip `{}` inside quoted strings. Prevents false "Unclosed JSON object" on LLM outputs with string values containing braces.
-17. **`clear_canvas` tool** — Maps "delete all / clear everything / start over" to a single tool call. Store already had `clearCanvas()` — tool just wires it up end-to-end.
-18. **Navbar uses logo/links/cta props only** — No children array. System prompt has explicit `NAVBAR RULE` + navbar as first example to prevent model from improvising nested containers.
+1. **No Mastra framework** — Using AI SDK directly with manual JSON parsing.
+2. **Manual JSON parsing over structured tool calling** — More reliable with Groq models.
+3. **Text-only input for MVP** — Voice removed. Can add back cleanly on top of working text system.
+4. **Inline styles for colors** — Agent outputs `style: { backgroundColor, color, --hover-bg }`. Tailwind JIT can't handle runtime-generated classes.
+5. **Hover via React events** — `onMouseEnter/Leave` on buttons handle `--hover-bg`. No CSS pseudo-classes.
+6. **Tailwind for static layout only** — `px-4 py-2 rounded grid` etc. Never for colors.
+7. **Multiple items via container children** — Agent wraps cards/etc in a `container` with `children[]`.
+8. **70B as sole model** — `llama-3.3-70b-versatile`, `maxTokens: 500`. 8B failure rate too high.
+9. **OpenRouter fallback chain on Groq 429** — `stepfun/step-3.5-flash:free` → `arcee-ai/trinity-large-preview:free` → `nvidia/nemotron-3-nano-30b-a3b:free`. Each validated for `params` before accepting.
+10. **Compact history** — Only `{ tool, message }` stored per turn. Max 10 messages (5 turns).
+11. **String-aware `extractJSON`** — Tracks `inString`/`escape` state. Skips `{}` inside strings. Prevents false "Unclosed JSON" errors.
+12. **`clear_canvas` tool** — Maps "delete all / start over" → `clearCanvas()` in store.
+13. **Navbar CTA as real child** — `createComponent` auto-generates a `button` child with its own UUID when `props.cta` is set. Agent can target it by ID. Renderer finds it via `children.find(c => c.type === "button")`.
+14. **Flat context for agent** — `flattenComponents()` recursively walks entire tree and adds `parent` field to children. Agent sees all IDs including deeply nested ones.
+15. **Recursive store operations** — `applyUpdate()`, `applyRemove()`, `applyAdd()` walk `children[]` at every level. Nested components can be targeted, deleted, and added.
+16. **`updateComponent` merges into `props`** — Changes are props-level. Merged as `{ ...c.props, ...changes }`. Style is deep-merged. Agent sometimes wraps in `{ props: {...} }` — store normalizes this.
+17. **`insertBefore` ordering** — All three creation tools (`create_component`, `create_form`, `create_section`) support `insertBefore` param. Store splices at correct index instead of appending.
+18. **Stale closure fix in `useSocket`** — Socket listeners capture callbacks in refs updated each render. Avoids stale `onToolCall` after re-renders (was breaking `clear_canvas` until page refresh).
+19. **History = full state snapshots** — Every mutating action pushes `components` to `history[]`. Undo pops and restores.
+20. **Zustand + persist** — Designs auto-save to localStorage. Survive page refresh.
 
-## What Needs to Happen Next (Phase 3)
+## What's Working End-to-End ✅
 
-1. **Card variants** — pricing card, feature card, profile/testimonial card, product card
-2. **Form components** — text, email, password, number inputs, textarea, select, checkboxes, radio, validation states
-3. **Navigation** — header/navbar improvements, footer with columns
-4. **Section/layout** — hero variants, features grid, CTA/banner, pricing section
-5. **Conversational context** — resolve "it"/"the button" references, track lastModified, multi-turn context
-6. **Update agent system prompt** — add all new component types and design principles
+- Create: navbar, hero, feature cards, pricing cards, forms, sections, containers
+- Modify: any component including nested children by ID
+- Add child to existing component
+- Delete: top-level and nested components
+- Ordering: insertBefore on all creation tools
+- Undo / redo
+- Clear canvas (instant, no refresh needed)
+- LocalStorage persistence
+- Groq rate limit → OpenRouter fallback chain
 
-## Environment Variables Needed
+## What's Left (Priority Order)
+
+1. **Code export** — HTML/Tailwind download button (highest value)
+2. **UI buttons** — Clear canvas + Undo in the toolbar
+3. **Better default styling** — Spacing, typography defaults
+4. **Voice input** — Add back on top of working text system
+
+## Environment Variables
 
 ```
-GROQ_API_KEY=           # Get from console.groq.com
-SMALLEST_AI_API_KEY=    # Get from smallest.ai dashboard
+GROQ_API_KEY=           # Required — console.groq.com
+OPENROUTER_API_KEY=     # For fallback chain — openrouter.ai
 ```
-
-GROQ_API_KEY is **required** for the agent to work. SMALLEST_AI_API_KEY is optional (browser fallbacks work without it).
 
 ## Commands
 
 ```bash
-npm run dev    # Start custom server with --watch (localhost:3000, Next.js + Socket.IO)
+npm run dev    # Start custom server with --watch (localhost:3000)
 npm run build  # Production build
 npm start      # Start production server (node server.js)
 ```
