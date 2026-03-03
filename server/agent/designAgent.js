@@ -7,6 +7,7 @@ import {
   modifyComponent,
   deleteComponent,
   undoAction,
+  clearCanvas,
 } from "../tools/designTools.js";
 
 const groq = createGroq({
@@ -21,12 +22,15 @@ RESPONSE FORMAT (always valid JSON, nothing else):
 TOOLS:
 1. create_component — {type, props, children?}
    Types: button|text|heading|card|input|container|section|image|divider|navbar
+   navbar props: {logo:"Name", links:["Home","About"], cta:"Button text"}
+   NAVBAR RULE: navbar uses ONLY logo/links/cta props. NO children array. NO nested containers.
 2. create_form — {title?, fields:[{type,label,placeholder?,required?}], submitText?}
    Field types: text|email|password|number|textarea|select
 3. create_section — {sectionType:"hero"|"features"|"pricing"|"cta"|"footer", content?:{title?,subtitle?,ctaText?}}
 4. modify_component — {componentId, changes}  ← use id from CANVAS context
 5. delete_component — {componentId}
 6. undo_action — {}
+7. clear_canvas — {}  ← use this for "delete all", "clear everything", "start over"
 
 COLORS: Always use style object, never Tailwind color classes.
   style:{"backgroundColor":"#hex","color":"#hex","--hover-bg":"#hex"}
@@ -40,6 +44,7 @@ MODIFY: Read componentId from CANVAS context below.
 ONE tool call per response.
 
 EXAMPLES:
+{"tool":"create_component","params":{"type":"navbar","props":{"logo":"LaunchKit","links":["Home","Features","Pricing"],"cta":"Get Started"}},"message":"Created navbar!"}
 {"tool":"create_component","params":{"type":"button","props":{"text":"Click","style":{"backgroundColor":"#3b82f6","color":"#ffffff","--hover-bg":"#2563eb"},"className":"px-4 py-2 rounded"}},"message":"Added blue button!"}
 {"tool":"create_section","params":{"sectionType":"hero","content":{"title":"Welcome","ctaText":"Get Started"}},"message":"Created hero section!"}
 {"tool":"create_component","params":{"type":"container","props":{"className":"grid grid-cols-3 gap-4"},"children":[{"type":"card","props":{"title":"F1","description":"Desc","className":"p-4"}},{"type":"card","props":{"title":"F2","description":"Desc","className":"p-4"}},{"type":"card","props":{"title":"F3","description":"Desc","className":"p-4"}}]},"message":"Created 3 cards!"}`;
@@ -56,6 +61,7 @@ async function executeTool(toolName, params) {
     modify_component: modifyComponent,
     delete_component: deleteComponent,
     undo_action: undoAction,
+    clear_canvas: clearCanvas,
   };
 
   const tool = tools[toolName];
@@ -94,43 +100,50 @@ export async function runAgent(
   ];
 
   try {
+    // Parse JSON from response — extract first {...} block, ignore trailing commentary.
+    // Properly skips { } characters inside string values so they don't affect depth.
+    function extractJSON(text) {
+      let s = text.trim();
+      if (s.startsWith("```")) {
+        s = s.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+      }
+      const start = s.indexOf("{");
+      if (start === -1) throw new Error("No JSON object found");
+      let depth = 0;
+      let inString = false;
+      let escape = false;
+      for (let i = start; i < s.length; i++) {
+        const ch = s[i];
+        if (escape)        { escape = false; continue; }
+        if (ch === "\\")   { escape = true;  continue; }
+        if (ch === '"')    { inString = !inString; continue; }
+        if (inString)      continue;
+        if (ch === "{")    depth++;
+        else if (ch === "}") {
+          depth--;
+          if (depth === 0) return JSON.parse(s.slice(start, i + 1));
+        }
+      }
+      throw new Error("Unclosed JSON object");
+    }
+
     const result = await generateText({
-      model: groq("llama-3.1-8b-instant"),
+      model: groq("llama-3.3-70b-versatile"),
       messages,
-      maxTokens: 400,
+      maxTokens: 500,
     });
 
     console.log("🔍 [Backend] Raw LLM response:", result.text);
 
-    // Parse JSON from response
     let toolCall;
     try {
-      let jsonText = result.text.trim();
-      if (jsonText.startsWith("```")) {
-        jsonText = jsonText.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
-      }
-      toolCall = JSON.parse(jsonText);
+      toolCall = extractJSON(result.text);
     } catch (parseError) {
-      console.error("❌ [Backend] Failed to parse JSON, retrying with 70b:", parseError);
-
-      // Retry once with the larger model
-      const retry = await generateText({
-        model: groq("llama-3.3-70b-versatile"),
-        messages,
-        maxTokens: 400,
-      });
-      let jsonText = retry.text.trim();
-      if (jsonText.startsWith("```")) {
-        jsonText = jsonText.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
-      }
-      try {
-        toolCall = JSON.parse(jsonText);
-      } catch {
-        return {
-          text: "Sorry, I had trouble understanding that. Can you try rephrasing?",
-          toolResults: [],
-        };
-      }
+      console.error("❌ [Backend] Failed to parse JSON:", parseError);
+      return {
+        text: "Sorry, I had trouble understanding that. Can you try rephrasing?",
+        toolResults: [],
+      };
     }
 
     console.log("🟢 [Backend] Parsed tool call:", {

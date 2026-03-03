@@ -15,6 +15,7 @@ export default function Home() {
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const removeComponent = useDesignStore((s) => s.removeComponent);
   const undo = useDesignStore((s) => s.undo);
+  const clearCanvas = useDesignStore((s) => s.clearCanvas);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -53,11 +54,14 @@ export default function Home() {
         case "undo":
           undo();
           break;
+        case "clear_canvas":
+          clearCanvas();
+          break;
         default:
           console.log("⚠️ [Frontend] Unknown action:", result.action);
       }
     },
-    [addComponent, updateComponent, removeComponent, undo]
+    [addComponent, updateComponent, removeComponent, undo, clearCanvas]
   );
 
   // Handle agent text response

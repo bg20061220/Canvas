@@ -373,6 +373,16 @@
 **Solution:** Merge changes into `props`: `props: { ...c.props, ...changes }`. Deep-merge `style` to avoid wiping existing style keys on partial updates.
 **Lesson:** Be precise about the shape of your update payloads. Know whether `changes` is component-level or props-level and merge accordingly.
 
+### 10. Small Models + Fallback Can Cost More Than Just Using the Large Model
+**Problem:** `llama-3.1-8b-instant` failed on complex JSON (navbar, multi-child containers), triggering a 70B retry — paying for both models on every failure. Failure rate was high enough that average cost exceeded just using 70B directly.
+**Solution:** Dropped 8B entirely. Use `llama-3.3-70b-versatile` as sole model. One reliable call is always cheaper than two unreliable ones.
+**Lesson:** Measure actual failure rate before assuming a small+fallback strategy saves money. If failure rate > ~30%, direct large model is cheaper.
+
+### 11. JSON Parsers Must Be String-Aware
+**Problem:** Brace-depth counter incremented/decremented on `{}` inside quoted string values, causing false "Unclosed JSON object" errors when the JSON was actually valid but contained string values with braces (e.g. CSS values, HTML fragments hallucinated by smaller models).
+**Solution:** Track `inString` and `escape` state — skip all characters inside quoted strings when counting depth.
+**Lesson:** Any custom JSON boundary detection must handle strings. `JSON.parse` handles this internally but custom extractors don't get it for free.
+
 ### 9. Token Costs Accumulate Fast With Verbose Prompts + Large History
 **Problem:** System prompt had duplicate rules (~700 tokens), history stored full JSON blobs (~200 tokens/turn × 20 turns), state context used pretty-printed JSON, no output cap.
 **Solution:** Trimmed system prompt to ~250 tokens, switched to 8B model (70B as fallback), added `maxTokens: 400`, compacted state context to a single line, store only `{ tool, message }` in history, reduced history to 10 messages.

@@ -138,6 +138,26 @@ props: {
 
 ---
 
+## Post-Phase 2 Reliability Fixes - COMPLETE ✅
+
+### Added `clear_canvas` tool
+- `server/tools/designTools.js` — new `clearCanvas()` function returning `{ action: "clear_canvas" }`
+- Registered in `designAgent.js` tool map
+- `page.js` — handles `clear_canvas` action by calling `useDesignStore.clearCanvas()`
+- System prompt updated: tool #7 `clear_canvas — {}` with note to use for "delete all / clear everything / start over"
+- Fixes: agent previously tried to call `delete_component` 11 times and failed to parse multi-call responses
+
+### Fixed `extractJSON` string-awareness
+**Problem:** The brace-depth parser counted `{` and `}` inside quoted string values (e.g. `"/div>"` hallucinated by 8B model), causing false "Unclosed JSON object" errors even when a valid JSON block was present.
+**Fix:** Parser now tracks `inString` state and `escape` flag, skipping all characters inside quoted strings when counting brace depth.
+
+### Switched primary model back to `llama-3.3-70b-versatile`
+**Problem:** `llama-3.1-8b-instant` reliably failed on complex components (navbar, multi-child containers) — generating invalid JSON with nested containers instead of using built-in types, then triggering a 70B retry anyway. Net cost: both models called per failure.
+**Fix:** 70B as sole model (`maxTokens: 500`). No fallback needed — one reliable call is cheaper than 8B-fail + 70B-retry.
+**Also:** Added `NAVBAR RULE` to system prompt and navbar as first example — model now uses `{logo, links, cta}` props directly instead of improvising nested containers.
+
+---
+
 ## Phase 3: Expand Components + Context - PENDING
 
 ## Phase 4: Smart Voice Features - PENDING

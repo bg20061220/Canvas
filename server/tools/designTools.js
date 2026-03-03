@@ -246,3 +246,10 @@ export async function undoAction() {
     action: "undo",
   };
 }
+
+// ─── Clear Canvas ───
+export async function clearCanvas() {
+  return {
+    action: "clear_canvas",
+  };
+}

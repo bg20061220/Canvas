@@ -26,7 +26,7 @@ The app runs (`node server.js` → localhost:3000) with a custom server that wra
 | State | Zustand + persist | `zustand` |
 | WebSocket | Socket.IO | `socket.io`, `socket.io-client` |
 | AI/LLM | Vercel AI SDK + Groq | `ai`, `@ai-sdk/groq` |
-| Model | **Llama 3.1 8B Instant** (primary), Llama 3.3 70B (fallback) | via Groq API |
+| Model | **Llama 3.3 70B Versatile** (sole model) | via Groq API |
 | Tool Calling | Manual JSON parsing | Custom implementation |
 | Persistence | localStorage | Browser API via Zustand persist |
 | IDs | uuid | `uuid` |
@@ -156,8 +156,11 @@ This is what goes in `designStore.components[]` and what the agent tools must pr
 11. **Split layout** — canvas left, chat right (like VS Code + Copilot)
 12. **History = full state snapshots** — simple but works for MVP, every action pushes to history[]
 13. **`updateComponent` merges changes into `props`** — `changes` from the agent are props-level (`{ style, className, text, ... }`). Must be spread into `c.props`, not `c` root. `style` is deep-merged to preserve existing style keys.
-14. **8B model primary, 70B fallback** — `llama-3.1-8b-instant` handles most requests cheaply. If JSON parse fails, retries once with `llama-3.3-70b-versatile`. `maxTokens: 400` caps output.
+14. **70B as sole model** — `llama-3.3-70b-versatile`, `maxTokens: 500`. 8B was dropped — it failed on complex components and triggered 70B retries anyway, costing more than just using 70B directly.
 15. **Compact history** — Only `{ tool, message }` stored per assistant turn (not full JSON blob). Max 10 messages (5 turns).
+16. **`extractJSON` is string-aware** — Brace-depth parser tracks `inString`/`escape` state to skip `{}` inside quoted strings. Prevents false "Unclosed JSON object" on LLM outputs with string values containing braces.
+17. **`clear_canvas` tool** — Maps "delete all / clear everything / start over" to a single tool call. Store already had `clearCanvas()` — tool just wires it up end-to-end.
+18. **Navbar uses logo/links/cta props only** — No children array. System prompt has explicit `NAVBAR RULE` + navbar as first example to prevent model from improvising nested containers.
 
 ## What Needs to Happen Next (Phase 3)
 
