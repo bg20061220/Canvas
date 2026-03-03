@@ -107,6 +107,37 @@ Tailwind JIT only generates CSS for classes found in source files at build time.
 
 ---
 
+---
+
+## Post-Phase 2 Bug Fixes & Optimizations - COMPLETE ✅
+
+### Bug Fix: `updateComponent` not applying changes visually
+
+**Root cause:** `designStore.updateComponent(id, changes)` was spreading `changes` at the component root (`{ ...c, ...changes }`) instead of into `props`. Since `changes` from the agent is `{ style: {...} }` (props-level), it ended up at `component.style` instead of `component.props.style`. `RenderComponent` reads `props.style`, so nothing visually changed.
+
+**Fix (`src/stores/designStore.js`):**
+```js
+props: {
+  ...c.props,
+  ...changes,
+  ...(changes.style ? { style: { ...c.props?.style, ...changes.style } } : {}),
+}
+```
+- `changes` now merges into `props` (not component root)
+- `style` is deep-merged so existing style keys aren't wiped on partial updates
+
+### Optimization: Token usage in `designAgent.js`
+
+**Changes:**
+- System prompt trimmed from ~700 to ~250 tokens (removed duplicate rules, collapsed examples to 3 inline ones)
+- Primary model switched to `llama-3.1-8b-instant` (cheap/fast). Auto-retries with `llama-3.3-70b-versatile` if JSON parse fails
+- `maxTokens: 400` added — caps output since JSON responses are never more than ~300 tokens
+- State context compacted to single line, skipped entirely when canvas is empty
+- History stores only `{ tool, message }` per assistant turn instead of full JSON blob
+- History limit reduced from 20 → 10 messages
+
+---
+
 ## Phase 3: Expand Components + Context - PENDING
 
 ## Phase 4: Smart Voice Features - PENDING

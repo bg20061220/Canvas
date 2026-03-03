@@ -9,10 +9,12 @@ A voice-first web app where users speak commands to design web components on a l
 ## Current Status
 
 **Phase 1: COMPLETE** — Foundation + UI layout (voice removed)
-**Phase 2: COMPLETE** — Agent + Socket.IO + text-to-canvas loop
+**Phase 2: COMPLETE** — Agent + Socket.IO + text-to-canvas loop (+ bug fixes)
 **Phase 3: NOT STARTED** — Expand components + context intelligence
 
 The app runs (`node server.js` → localhost:3000) with a custom server that wraps Next.js + Socket.IO. **Text input only** (voice features removed for MVP). Uses Groq-powered AI agent with **manual JSON parsing** (no Mastra). Agent outputs JSON, we parse and execute tool functions. Components persist to localStorage. Requires `GROQ_API_KEY` in `.env.local`.
+
+**Create and modify both work correctly.** The `updateComponent` store bug (changes merging at component root instead of into `props`) has been fixed.
 
 ## Tech Stack
 
@@ -24,7 +26,7 @@ The app runs (`node server.js` → localhost:3000) with a custom server that wra
 | State | Zustand + persist | `zustand` |
 | WebSocket | Socket.IO | `socket.io`, `socket.io-client` |
 | AI/LLM | Vercel AI SDK + Groq | `ai`, `@ai-sdk/groq` |
-| Model | Llama 3.3 70B | via Groq API |
+| Model | **Llama 3.1 8B Instant** (primary), Llama 3.3 70B (fallback) | via Groq API |
 | Tool Calling | Manual JSON parsing | Custom implementation |
 | Persistence | localStorage | Browser API via Zustand persist |
 | IDs | uuid | `uuid` |
@@ -153,6 +155,9 @@ This is what goes in `designStore.components[]` and what the agent tools must pr
 10. **RenderComponent is recursive** — cards/forms/sections can have children[], each rendered by the same switch
 11. **Split layout** — canvas left, chat right (like VS Code + Copilot)
 12. **History = full state snapshots** — simple but works for MVP, every action pushes to history[]
+13. **`updateComponent` merges changes into `props`** — `changes` from the agent are props-level (`{ style, className, text, ... }`). Must be spread into `c.props`, not `c` root. `style` is deep-merged to preserve existing style keys.
+14. **8B model primary, 70B fallback** — `llama-3.1-8b-instant` handles most requests cheaply. If JSON parse fails, retries once with `llama-3.3-70b-versatile`. `maxTokens: 400` caps output.
+15. **Compact history** — Only `{ tool, message }` stored per assistant turn (not full JSON blob). Max 10 messages (5 turns).
 
 ## What Needs to Happen Next (Phase 3)
 

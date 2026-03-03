@@ -43,9 +43,18 @@ const useDesignStore = create(
     set({
       history: [...state.history, { components: [...state.components] }],
       future: [],
-      components: state.components.map((c) =>
-        c.id === id ? { ...c, ...changes, props: { ...c.props, ...changes.props } } : c
-      ),
+      components: state.components.map((c) => {
+        if (c.id !== id) return c;
+        return {
+          ...c,
+          props: {
+            ...c.props,
+            ...changes,
+            // Deep-merge style so existing style props aren't wiped
+            ...(changes.style ? { style: { ...c.props?.style, ...changes.style } } : {}),
+          },
+        };
+      }),
       context: { ...state.context, lastModified: id },
     });
   },

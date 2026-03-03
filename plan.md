@@ -368,6 +368,16 @@
 **Solution:** Zustand persist middleware → automatic localStorage sync.
 **Lesson:** Add persistence early. It's trivial with modern tools and provides huge UX value.
 
+### 8. `updateComponent` Must Merge Into `props`, Not Component Root
+**Problem:** Agent sends `changes: { style: {...} }` (props-level). Store was doing `{ ...component, ...changes }` which put `style` at the component root, not inside `props`. `RenderComponent` reads `props.style` — so modifications had no visual effect.
+**Solution:** Merge changes into `props`: `props: { ...c.props, ...changes }`. Deep-merge `style` to avoid wiping existing style keys on partial updates.
+**Lesson:** Be precise about the shape of your update payloads. Know whether `changes` is component-level or props-level and merge accordingly.
+
+### 9. Token Costs Accumulate Fast With Verbose Prompts + Large History
+**Problem:** System prompt had duplicate rules (~700 tokens), history stored full JSON blobs (~200 tokens/turn × 20 turns), state context used pretty-printed JSON, no output cap.
+**Solution:** Trimmed system prompt to ~250 tokens, switched to 8B model (70B as fallback), added `maxTokens: 400`, compacted state context to a single line, store only `{ tool, message }` in history, reduced history to 10 messages.
+**Lesson:** Every token in the system prompt + history is paid on every request. Audit token usage early.
+
 ---
 
 ## Key Dependencies to Install (Actual)
