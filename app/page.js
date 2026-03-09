@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import CanvasRenderer from "@/src/components/canvas/CanvasRenderer";
+import ExportModal from "@/src/components/export/ExportModal";
 import useDesignStore from "@/src/stores/designStore";
 import { useSocket } from "@/src/lib/socket/useSocket";
 
@@ -9,9 +10,12 @@ export default function Home() {
   const [textInput, setTextInput] = useState("");
   const [status, setStatus] = useState("idle");
   const [messages, setMessages] = useState([]);
+  const [showExport, setShowExport] = useState(false);
   const messagesEndRef = useRef(null);
 
+  const components = useDesignStore((s) => s.components);
   const addComponent = useDesignStore((s) => s.addComponent);
+  const reorderChild = useDesignStore((s) => s.reorderChild);
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const removeComponent = useDesignStore((s) => s.removeComponent);
   const addChildComponent = useDesignStore((s) => s.addChildComponent);
@@ -58,6 +62,9 @@ export default function Home() {
         case "add_child":
           addChildComponent(result.parentId, result.child, result.insertBefore || null);
           break;
+        case "reorder_child":
+          reorderChild(result.parentId, result.childId, result.newIndex);
+          break;
         case "clear_canvas":
           clearCanvas();
           break;
@@ -65,7 +72,7 @@ export default function Home() {
           console.log("⚠️ [Frontend] Unknown action:", result.action);
       }
     },
-    [addComponent, updateComponent, removeComponent, addChildComponent, undo, clearCanvas]
+    [addComponent, updateComponent, removeComponent, addChildComponent, undo, clearCanvas, reorderChild]
   );
 
   // Handle agent text response
@@ -150,6 +157,16 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowExport(true)}
+            disabled={components.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-gray-300 rounded-lg transition-colors border border-gray-700"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Export
+          </button>
           <div className="flex items-center gap-2 text-sm text-gray-400">
             <div
               className={`w-2 h-2 rounded-full ${
@@ -172,7 +189,7 @@ export default function Home() {
       {/* ─── Main: Canvas (left) + Chat (right) ─── */}
       <div className="flex flex-1 overflow-hidden">
         {/* ─── Canvas Panel (left) ─── */}
-        <main className="flex-1 overflow-y-auto bg-[#0a0a1a] border-r border-gray-800">
+        <main className="flex-1 overflow-y-auto bg-[#f7f5f0] border-r border-gray-200">
           <CanvasRenderer />
         </main>
 
@@ -301,6 +318,10 @@ export default function Home() {
           </div>
         </aside>
       </div>
+
+      {showExport && (
+        <ExportModal components={components} onClose={() => setShowExport(false)} />
+      )}
     </div>
   );
 }

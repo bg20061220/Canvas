@@ -164,6 +164,35 @@ const useDesignStore = create(
     });
   },
 
+  reorderChild: (parentId, childId, newIndex) => {
+    const state = get();
+
+    function applyReorder(components) {
+      return components.map((c) => {
+        if (c.id === parentId) {
+          const kids = [...(c.children || [])];
+          const from = kids.findIndex((k) => k.id === childId);
+          if (from === -1) return c;
+          const [moved] = kids.splice(from, 1);
+          const clampedIndex = Math.max(0, Math.min(newIndex, kids.length));
+          kids.splice(clampedIndex, 0, moved);
+          return { ...c, children: kids };
+        }
+        if (c.children?.length > 0) {
+          return { ...c, children: applyReorder(c.children) };
+        }
+        return c;
+      });
+    }
+
+    set({
+      history: [...state.history, { components: [...state.components] }],
+      future: [],
+      components: applyReorder(state.components),
+      context: { ...state.context, lastModified: parentId },
+    });
+  },
+
   setTheme: (theme) => set({ theme: { ...get().theme, ...theme } }),
 
   // Bulk replace components (used by socket to apply agent state)

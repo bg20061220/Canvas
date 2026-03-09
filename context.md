@@ -11,7 +11,7 @@ A text-based web app where users type commands to design web components on a liv
 **Phase 1: COMPLETE** — Foundation + UI layout
 **Phase 2: COMPLETE** — Agent + Socket.IO + text-to-canvas loop (+ all bug fixes)
 **Phase 3: PARTIALLY COMPLETE** — Child targeting ✅, add_child ✅, card variants ✅, ordering ✅ | voice context pending
-**Phase 5: IN PROGRESS** — Export feature next
+**Phase 5: COMPLETE** — Export ✅, light-mode canvas ✅, default styling ✅
 
 The app runs (`node server.js` → localhost:3000). **Text input only** (voice removed for MVP). Uses Groq-powered AI agent with **manual JSON parsing**. All 15 core interactions work end-to-end including nested child targeting, component ordering, and API fallback chains.
 
@@ -96,6 +96,17 @@ Canvas/
 │   └── socket/
 │       └── handler.js              # user_input → runAgent → emit tool_call + agent_response
 │
+├── src/
+│   ├── lib/
+│   │   └── export/
+│   │       └── generateHTML.js     # Recursive component tree → standalone HTML string
+│   │                               # Tailwind CDN + Inter font in boilerplate
+│   │                               # Inline style="" for colors (mirrors renderer)
+│   └── components/
+│       └── export/
+│           └── ExportModal.js      # Modal: code preview + Copy + Download buttons
+│                                   # Closes on Escape or outside click
+│
 ├── plan.md / progress.md / context.md
 ├── .env.local                      # GROQ_API_KEY, OPENROUTER_API_KEY
 └── package.json
@@ -148,11 +159,18 @@ Canvas/
 18. **Stale closure fix in `useSocket`** — Socket listeners capture callbacks in refs updated each render. Avoids stale `onToolCall` after re-renders (was breaking `clear_canvas` until page refresh).
 19. **History = full state snapshots** — Every mutating action pushes `components` to `history[]`. Undo pops and restores.
 20. **Zustand + persist** — Designs auto-save to localStorage. Survive page refresh.
+21. **Recursive `buildChild` in `createComponent`** — `designTools.js` previously hardcoded `children: []` when mapping child components. Extracted recursive `buildChild()` so nested children (e.g. grid container → cards) are preserved at any depth.
+22. **`extractJSON` treats `)` as `}`** — Groq model occasionally uses `)` to close JSON objects. Parser now builds output char-by-char: outside strings, `)` decrements depth and is written as `}`. Safe — valid JSON never uses `)` at brace level, so string content like `"(beta)"` is untouched.
+23. **`reorder_child` tool** — Moves a child to a new 0-based index within its parent. Store's `reorderChild` does recursive tree walk + splice. Agent prompt documents it with index example.
+24. **`_parentType` for context-aware rendering** — `RenderComponent` passes `_parentType` one level down. Buttons inside a hero automatically render larger (`px-8 py-3 text-base`). Extensible for other context-sensitive defaults.
+25. **Light-mode canvas** — Canvas bg `#f7f5f0` (warm off-white). All components use white surfaces + gray borders. Colors chosen to complement each other (not just invert dark theme).
+26. **Hero subtitle is optional** — `create_section` hero no longer injects a hardcoded default subtitle. Only adds text child when `content.subtitle` is explicitly provided. `ctaStyle` param added for custom button colors in one call.
 
 ## What's Working End-to-End ✅
 
 - Create: navbar, hero, feature cards, pricing cards, forms, sections, containers
 - Modify: any component including nested children by ID
+- Reorder children within a parent (`reorder_child` tool)
 - Add child to existing component
 - Delete: top-level and nested components
 - Ordering: insertBefore on all creation tools
@@ -160,13 +178,13 @@ Canvas/
 - Clear canvas (instant, no refresh needed)
 - LocalStorage persistence
 - Groq rate limit → OpenRouter fallback chain
+- **Export:** HTML/Tailwind download (ExportModal + generateHTML)
+- **Light-mode canvas** — warm off-white bg, white card surfaces, gray borders
 
 ## What's Left (Priority Order)
 
-1. **Code export** — HTML/Tailwind download button (highest value)
-2. **UI buttons** — Clear canvas + Undo in the toolbar
-3. **Better default styling** — Spacing, typography defaults
-4. **Voice input** — Add back on top of working text system
+1. **UI buttons** — Clear canvas + Undo in the toolbar
+2. **Voice input** — Add back on top of working text system
 
 ## Environment Variables
 

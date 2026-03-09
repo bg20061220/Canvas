@@ -1,14 +1,18 @@
 import { v4 as uuidv4 } from "uuid";
 
 // ─── Create Component ───
-export async function createComponent({ type, props = {}, children = [], parentId, insertBefore = null }) {
-  const id = `${type}_${uuidv4().slice(0, 8)}`;
-  let childComponents = (children || []).map((child) => ({
+function buildChild(child) {
+  return {
     id: `${child.type}_${uuidv4().slice(0, 8)}`,
     type: child.type,
     props: child.props || {},
-    children: [],
-  }));
+    children: (child.children || []).map(buildChild),
+  };
+}
+
+export async function createComponent({ type, props = {}, children = [], parentId, insertBefore = null }) {
+  const id = `${type}_${uuidv4().slice(0, 8)}`;
+  let childComponents = (children || []).map(buildChild);
 
   // Navbar: auto-generate CTA as a real button child so it has its own ID and is targetable
   if (type === "navbar" && props.cta) {
@@ -96,17 +100,16 @@ export async function createSection({ sectionType, content = {}, insertBefore = 
           },
           children: [],
         },
-        {
+        // Only add subtitle if explicitly provided
+        ...(content.subtitle ? [{
           id: `text_${uuidv4().slice(0, 8)}`,
           type: "text",
           props: {
-            text:
-              content.subtitle ||
-              "Build amazing things with our powerful platform",
+            text: content.subtitle,
             className: "text-xl text-gray-600 mb-8",
           },
           children: [],
-        },
+        }] : []),
         {
           id: `button_${uuidv4().slice(0, 8)}`,
           type: "button",
@@ -114,6 +117,8 @@ export async function createSection({ sectionType, content = {}, insertBefore = 
             text: content.ctaText || "Get Started",
             variant: "primary",
             className: "text-lg px-8 py-3",
+            // Pass through ctaStyle if provided (e.g. custom colors)
+            ...(content.ctaStyle ? { style: content.ctaStyle } : {}),
           },
           children: [],
         },
@@ -271,6 +276,16 @@ export async function undoAction() {
 export async function clearCanvas() {
   return {
     action: "clear_canvas",
+  };
+}
+
+// ─── Reorder Child ───
+export async function reorderChild({ parentId, childId, newIndex }) {
+  return {
+    action: "reorder_child",
+    parentId,
+    childId,
+    newIndex,
   };
 }
 

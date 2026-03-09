@@ -10,6 +10,7 @@ import {
   undoAction,
   clearCanvas,
   addChild,
+  reorderChild,
 } from "../tools/designTools.js";
 
 const groq = createGroq({
@@ -36,7 +37,8 @@ TOOLS:
    Example: footer exists → add pricing section above it → insertBefore: "section_footer_id"
 2. create_form — {title?, fields:[{type,label,placeholder?,required?}], submitText?, insertBefore?}
    Field types: text|email|password|number|textarea|select
-3. create_section — {sectionType:"hero"|"features"|"pricing"|"cta"|"footer", content?:{title?,subtitle?,ctaText?}, insertBefore?}
+3. create_section — {sectionType:"hero"|"features"|"pricing"|"cta"|"footer", content?:{title?,subtitle?,ctaText?,ctaStyle?:{backgroundColor,color,"--hover-bg"}}, insertBefore?}
+   subtitle is OPTIONAL — omit it if the user did not ask for one
 4. modify_component — {componentId, changes}
    changes can ONLY update props: style, className, text, title, placeholder, etc.
    CANNOT add/remove children — use add_child or delete_component for that.
@@ -45,9 +47,15 @@ TOOLS:
    parentId: the id of the parent from CANVAS context
    child: same shape as create_component params (type + props, no id needed)
    insertBefore: child id to insert before (for ordering within parent)
-6. delete_component — {componentId}  ← works on both top-level and nested children
-7. undo_action — {}
-8. clear_canvas — {}  ← use this for "delete all", "clear everything", "start over"
+6. reorder_child — {parentId, childId, newIndex}  ← moves an existing child to a new position
+   Use for: "move the button below the subtitle", "put the heading first", "swap these two elements"
+   parentId: id of the parent component containing the child
+   childId: id of the child to move (from CANVAS context)
+   newIndex: 0-based integer position to move it to (0 = first, 1 = second, etc.)
+   Example: parent has [heading(0), text(1), button(2)] → move button to index 1 → [heading(0), button(1), text(2)]
+7. delete_component — {componentId}  ← works on both top-level and nested children
+8. undo_action — {}
+9. clear_canvas — {}  ← use this for "delete all", "clear everything", "start over"
 
 COLORS: Always use style object, never Tailwind color classes.
   style:{"backgroundColor":"#hex","color":"#hex","--hover-bg":"#hex"}
@@ -88,6 +96,7 @@ async function executeTool(toolName, params) {
     undo_action: undoAction,
     clear_canvas: clearCanvas,
     add_child: addChild,
+    reorder_child: reorderChild,
   };
 
   const tool = tools[toolName];
@@ -152,16 +161,21 @@ export async function runAgent(
       let depth = 0;
       let inString = false;
       let escape = false;
+      let output = "";
       for (let i = start; i < s.length; i++) {
         const ch = s[i];
-        if (escape)        { escape = false; continue; }
-        if (ch === "\\")   { escape = true;  continue; }
-        if (ch === '"')    { inString = !inString; continue; }
-        if (inString)      continue;
-        if (ch === "{")    depth++;
-        else if (ch === "}") {
+        if (escape)      { escape = false; output += ch; continue; }
+        if (ch === "\\") { escape = true;  output += ch; continue; }
+        if (ch === '"')  { inString = !inString; output += ch; continue; }
+        if (inString)    { output += ch; continue; }
+        if (ch === "{")  { depth++; output += ch; }
+        else if (ch === "}" || ch === ")") {
+          // LLMs sometimes use ) instead of } — treat them the same outside strings
           depth--;
-          if (depth === 0) return JSON.parse(s.slice(start, i + 1));
+          output += "}";
+          if (depth === 0) return JSON.parse(output);
+        } else {
+          output += ch;
         }
       }
       throw new Error("Unclosed JSON object");

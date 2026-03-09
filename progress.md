@@ -113,9 +113,63 @@ Agent sometimes wraps changes in a redundant `props` key: `changes: { props: { s
 
 ---
 
+---
+
+## Session 4: Export + Styling + Bug Fixes - COMPLETE ✅
+
+### HTML Export feature
+New export pipeline — click **Export** in the header to view and download a standalone HTML file.
+- `src/lib/export/generateHTML.js` — recursively walks component tree, maps every type to HTML with Tailwind classes and inline styles for colors. Wraps in full HTML boilerplate with Tailwind CDN + Inter font.
+- `src/components/export/ExportModal.js` — modal with syntax-highlighted code preview, Copy and Download buttons. Closes on Escape or clicking outside.
+- `app/page.js` — Export button in header (disabled when canvas empty), `showExport` state, renders modal.
+- **Format:** standalone `.html` with Tailwind CDN. Inline `style=""` attributes for colors (consistent with renderer approach).
+
+### Light-mode canvas + component reskin
+Canvas background changed from near-black `#0a0a1a` to warm off-white `#f7f5f0`. All components updated to complement:
+- Cards, forms, navbar → `bg-white border border-gray-200 shadow-sm`
+- Hero → `from-blue-50 to-purple-50 border border-blue-100`
+- Headings → `text-gray-900`, body text → `text-gray-500/600`
+- Inputs → `bg-white border-gray-300`
+- Image placeholder → `bg-gray-100`
+- Button secondary → `bg-gray-100 border-gray-300 text-gray-800`
+
+### Better default styling (typography + spacing)
+`RenderComponent.js` overhaul — components look polished without the agent specifying every detail:
+- Headings: `leading-tight tracking-tight`, full color hierarchy (`text-gray-900` → `text-gray-800`)
+- Body text: `text-gray-300 leading-relaxed` (dark) / `text-gray-600 leading-relaxed` (light)
+- Cards: replaced ad-hoc `mb-2/my-3/mt-3` margins with `flex flex-col gap-3`
+- Hero: content wrapped in `max-w-2xl mx-auto` so text doesn't stretch edge-to-edge; children in `flex-wrap gap-3 justify-center`
+- `_parentType` prop passed one level down — buttons inside hero get `px-8 py-3 text-base` (larger CTA size) automatically
+
+### Bug fix: `createComponent` dropping nested children
+**Problem:** `createComponent` in `designTools.js` hardcoded `children: []` when mapping child components — any child that itself had children (e.g. grid container → pricing cards) silently lost its nested content.
+**Fix:** Extracted recursive `buildChild()` helper that walks the full tree at any depth, assigning UUIDs at every level.
+
+### Bug fix: LLM using `)` instead of `}` in JSON
+**Problem:** Groq model occasionally closes JSON objects with `)` instead of `}` (e.g. `"changes":{...})`). `extractJSON` only tracked `{`/`}` depth so `)` was invisible → "Unclosed JSON object" error.
+**Fix:** `extractJSON` now builds the output string character-by-character. Outside of strings, `)` is treated as `}` (decrements depth, written as `}`). `)` inside string values is left untouched.
+
+### New tool: `reorder_child`
+Moves an existing child to a new index within its parent.
+- `designTools.js` — `reorderChild({ parentId, childId, newIndex })` returns `{ action: "reorder_child" }`
+- `designStore.js` — `reorderChild(parentId, childId, newIndex)` splices child out and re-inserts at clamped index, recursive tree walk
+- `designAgent.js` — registered in executor, tool #6 added to system prompt with 0-based index example
+- `app/page.js` — `case "reorder_child"` handler added
+- **Use case:** "move the button below the subtitle", "put the heading first"
+
+### Bug fix: `create_section` hero always injecting default subtitle
+**Problem:** Hero sections always added a hardcoded `"Build amazing things with our powerful platform"` text child even when no subtitle was requested.
+**Fix:** Subtitle child now only added when `content.subtitle` is explicitly provided (conditional spread).
+
+### `create_section` hero: `ctaStyle` support
+Hero CTA button now accepts `content.ctaStyle: { backgroundColor, color, "--hover-bg" }`. System prompt updated to document this. Enables "create hero with black button" without a separate `modify_component` call.
+
+---
+
 ## What's Working End-to-End ✅
 - Create: navbar, hero, feature cards, pricing cards, forms, sections, containers
 - Modify: any component including nested children by ID
+- Reorder children within a parent
 - Add child to existing component
 - Delete: top-level and nested components
 - Ordering: insertBefore on all creation tools
@@ -123,11 +177,11 @@ Agent sometimes wraps changes in a redundant `props` key: `changes: { props: { s
 - Clear canvas (instant, no refresh needed)
 - LocalStorage persistence
 - Groq rate limit → OpenRouter fallback chain
+- **Export: HTML/Tailwind download**
+- **Light-mode canvas with polished component defaults**
 
 ## What's Left
-- [ ] Code export (HTML/Tailwind download)
-- [ ] Clear canvas + Undo buttons in the UI
-- [ ] Better default component styling
+- [ ] Clear canvas + Undo buttons in the UI toolbar
 - [ ] Voice input (add back on top of text)
 
 ---
@@ -137,6 +191,6 @@ Agent sometimes wraps changes in a redundant `props` key: `changes: { props: { s
 
 ## Phase 4: Smart Voice Features - PENDING
 
-## Phase 5: Export & UI Polish - IN PROGRESS
+## Phase 5: Export & UI Polish - COMPLETE ✅
 
 ## Phase 6: Nice-to-Have - PENDING
